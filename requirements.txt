@@ -1,0 +1,4 @@
+# Local development: agent + MCP stub + web
+-r agents/personal_assistant/requirements.txt
+mcp[cli]>=1.2.0
+uvicorn>=0.30.0

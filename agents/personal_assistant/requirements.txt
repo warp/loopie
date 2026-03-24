@@ -1,0 +1,2 @@
+google-adk>=1.27.0
+asyncpg>=0.29.0
