@@ -1,19 +1,5 @@
--- Tasks and notes stored in AlloyDB (PostgreSQL-compatible).
+-- Notes and calendar cache in AlloyDB (PostgreSQL-compatible).
 -- Run against your database before using the agent tools.
-
-CREATE TABLE IF NOT EXISTS tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open',
-    due_at TIMESTAMPTZ,
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_tasks_user_status ON tasks (user_id, status);
-CREATE INDEX IF NOT EXISTS idx_tasks_user_due ON tasks (user_id, due_at);
 
 CREATE TABLE IF NOT EXISTS notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

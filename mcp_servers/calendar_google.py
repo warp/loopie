@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import google.auth.credentials
@@ -16,18 +15,9 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from zoneinfo import ZoneInfo
 
-SCOPES = ("https://www.googleapis.com/auth/calendar",)
+from mcp_servers import google_auth_env as gae
 
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
-
-def _resolve_env_path(p: str) -> str:
-    path = Path(p)
-    if path.is_absolute():
-        return str(path)
-    return str(_repo_root() / path)
+CALENDAR_SCOPES = ("https://www.googleapis.com/auth/calendar",)
 
 
 def _user_timezone() -> str:
@@ -53,23 +43,25 @@ def _to_rfc3339(dt: datetime) -> str:
 
 
 def _load_credentials() -> google.auth.credentials.Credentials | None:
-    sa_json = os.environ.get("GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON")
-    sa_path = os.environ.get("GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH")
+    sa_json = gae.service_account_json()
+    sa_path = gae.service_account_path()
     if sa_json:
         info = json.loads(sa_json)
-        return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+        return service_account.Credentials.from_service_account_info(
+            info, scopes=CALENDAR_SCOPES
+        )
     if sa_path:
         return service_account.Credentials.from_service_account_file(
-            _resolve_env_path(sa_path), scopes=SCOPES
+            gae.resolve_env_path(sa_path), scopes=CALENDAR_SCOPES
         )
 
-    tok_json = os.environ.get("GOOGLE_CALENDAR_TOKEN_JSON")
-    tok_path = os.environ.get("GOOGLE_CALENDAR_TOKEN_PATH")
+    tok_json = gae.oauth_token_json()
+    tok_path = gae.oauth_token_path()
     if tok_json:
-        return UserCredentials.from_authorized_user_info(json.loads(tok_json), SCOPES)
+        return UserCredentials.from_authorized_user_info(json.loads(tok_json), CALENDAR_SCOPES)
     if tok_path:
         return UserCredentials.from_authorized_user_file(
-            _resolve_env_path(tok_path), SCOPES
+            gae.resolve_env_path(tok_path), CALENDAR_SCOPES
         )
     return None
 
@@ -93,8 +85,8 @@ def credentials_missing_response() -> str:
         {
             "error": "calendar_credentials_not_configured",
             "hint": (
-                "Set GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON or GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH, "
-                "or GOOGLE_CALENDAR_TOKEN_JSON / GOOGLE_CALENDAR_TOKEN_PATH (OAuth token with Calendar scope). "
+                "Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_PATH, "
+                "or GOOGLE_OAUTH_TOKEN_JSON / GOOGLE_OAUTH_TOKEN_PATH (OAuth token with Calendar scope). "
                 "For service accounts, share the target calendar with the SA email and set GOOGLE_CALENDAR_ID."
             ),
         },

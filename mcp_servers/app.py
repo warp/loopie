@@ -1,5 +1,5 @@
 """
-MCP server: Google Calendar (when creds are set), plus stub external tasks/notes.
+MCP server: Google Calendar and Google Tasks (when creds are set), plus stub external notes.
 
 Run SSE:  python -m mcp_servers.app sse   (default)
 Run stdio: python -m mcp_servers.app stdio
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# So GOOGLE_CALENDAR_* and paths in .env apply when running: python -m mcp_servers.app sse
+# So shared Google API env vars and paths in .env apply when running: python -m mcp_servers.app sse
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 import asyncio
@@ -27,8 +27,8 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from mcp_servers import calendar_google
+from mcp_servers import tasks_google
 
-_tasks: dict[str, dict[str, Any]] = {}
 _notes: list[dict[str, Any]] = []
 
 
@@ -57,25 +57,18 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def external_task_create(title: str, due_iso: str | None = None) -> str:
-        """Create a task in the external task manager integration (stub, not AlloyDB)."""
-        tid = str(uuid.uuid4())
-        item = {"task_id": tid, "title": title, "due_iso": due_iso, "status": "open"}
-        _tasks[tid] = item
-        return json.dumps(item, indent=2)
+        """Create a task in Google Tasks. due_iso is optional RFC3339."""
+        return tasks_google.create_task(title, due_iso)
 
     @mcp.tool()
     def external_task_list() -> str:
-        """List tasks from the external task manager (stub)."""
-        return json.dumps(list(_tasks.values()), indent=2)
+        """List tasks from Google Tasks (current list; see GOOGLE_TASKS_LIST_ID)."""
+        return tasks_google.list_tasks()
 
     @mcp.tool()
     def external_task_complete(task_id: str) -> str:
-        """Mark an external task completed (stub)."""
-        t = _tasks.get(task_id)
-        if not t:
-            return json.dumps({"error": "unknown task_id"})
-        t["status"] = "done"
-        return json.dumps(t, indent=2)
+        """Mark a Google Tasks task completed by task_id."""
+        return tasks_google.complete_task(task_id)
 
     @mcp.tool()
     def external_note_create(title: str, body: str) -> str:

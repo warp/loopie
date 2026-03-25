@@ -1,13 +1,17 @@
-"""One-time OAuth consent: writes a token file for GOOGLE_CALENDAR_TOKEN_PATH.
+"""One-time OAuth consent: writes a token file for GOOGLE_OAUTH_TOKEN_PATH.
+
+Requests Google Calendar and Google Tasks scopes so one token can drive both MCP integrations.
 
 Usage:
   GOOGLE_OAUTH_CLIENT_SECRETS_PATH=/path/to/client_secret.json \\
-  GOOGLE_CALENDAR_TOKEN_PATH=/path/to/token.json \\
-  python -m mcp_servers.oauth_calendar_setup
+  GOOGLE_OAUTH_TOKEN_PATH=/path/to/token.json \\
+  python -m mcp_servers.oauth_setup
 
-Or pass paths as argv: python -m mcp_servers.oauth_calendar_setup client_secret.json token.json
+Or pass paths as argv: python -m mcp_servers.oauth_setup client_secret.json token.json
 
-If GOOGLE_OAUTH_CLIENT_SECRETS_PATH / GOOGLE_CALENDAR_TOKEN_PATH are set in the repo .env, they are loaded automatically (python-dotenv).
+If GOOGLE_OAUTH_CLIENT_SECRETS_PATH / GOOGLE_OAUTH_TOKEN_PATH are set in the repo .env, they are loaded automatically (python-dotenv).
+
+Enable the Google Tasks API in the same GCP project as the OAuth client.
 """
 
 from __future__ import annotations
@@ -19,7 +23,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from mcp_servers.calendar_google import SCOPES
+from mcp_servers.calendar_google import CALENDAR_SCOPES
+from mcp_servers.tasks_google import TASKS_SCOPES
+
+OAUTH_SCOPES = list(CALENDAR_SCOPES) + list(TASKS_SCOPES)
 
 
 def _repo_root() -> Path:
@@ -44,17 +51,17 @@ def main() -> None:
         out = _resolve_path(sys.argv[2])
     else:
         secrets = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRETS_PATH", "")
-        out = os.environ.get("GOOGLE_CALENDAR_TOKEN_PATH", "")
+        out = os.environ.get("GOOGLE_OAUTH_TOKEN_PATH", "")
         if not secrets or not out:
             print(
-                "Set GOOGLE_OAUTH_CLIENT_SECRETS_PATH and GOOGLE_CALENDAR_TOKEN_PATH, "
-                "or run: python -m mcp_servers.oauth_calendar_setup <client_secret.json> <token_out.json>",
+                "Set GOOGLE_OAUTH_CLIENT_SECRETS_PATH and GOOGLE_OAUTH_TOKEN_PATH, "
+                "or run: python -m mcp_servers.oauth_setup <client_secret.json> <token_out.json>",
                 file=sys.stderr,
             )
             sys.exit(1)
         secrets = _resolve_path(secrets)
         out = _resolve_path(out)
-    flow = InstalledAppFlow.from_client_secrets_file(secrets, list(SCOPES))
+    flow = InstalledAppFlow.from_client_secrets_file(secrets, OAUTH_SCOPES)
     creds = flow.run_local_server(port=0)
     with open(out, "w", encoding="utf-8") as f:
         f.write(creds.to_json())

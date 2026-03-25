@@ -1,13 +1,13 @@
 # Personal agent (ADK + Vertex AI + AlloyDB + Cloud Run)
 
-Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (Postgres/AlloyDB + optional external-task MCP), and **notes** (database + optional external-notes MCP).
+Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (Google Tasks MCP), and **notes** (database + optional external-notes MCP).
 
 ## Layout
 
 | Path | Purpose |
 |------|---------|
 | [agents/personal_assistant/](agents/personal_assistant/) | ADK app: `root_agent`, tools, specialists |
-| [mcp_servers/](mcp_servers/) | Stub MCP server (SSE or stdio) for demos |
+| [mcp_servers/](mcp_servers/) | MCP server (Google Calendar & Tasks; stub notes) over SSE or stdio |
 | [sql/migrations/](sql/migrations/) | AlloyDB-compatible schema |
 | [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md) | Cloud Run, VPC, secrets, `adk deploy` |
 

@@ -1,4 +1,4 @@
-"""Specialist LlmAgents: schedule (MCP calendar), tasks (DB + MCP), info (DB + MCP notes)."""
+"""Specialist LlmAgents: schedule (MCP calendar), tasks (Google Tasks MCP), info (DB + MCP notes)."""
 
 from __future__ import annotations
 
@@ -45,9 +45,6 @@ def build_schedule_agent() -> LlmAgent:
 
 def build_task_agent() -> LlmAgent:
     tools = [
-        db_tools.db_create_task,
-        db_tools.db_list_tasks,
-        db_tools.db_update_task,
         db_tools.db_record_calendar_cache,
         *mcp_toolset_for_agent(
             tool_filter=[
@@ -62,14 +59,12 @@ def build_task_agent() -> LlmAgent:
         model=MODEL,
         name="TaskSpecialist",
         description=(
-            "Manages structured tasks in the database and optional external task MCP. "
-            "Use for CRUD on tasks, listing work items, or recording calendar snapshots in DB."
+            "Manages Google Tasks via MCP and optional calendar event snapshots in the database."
         ),
         instruction=(
-            "You own task data in the database: create, list, and update tasks with the db_* tools. "
-            "Use ISO-8601 for due_at. "
-            "When the user also uses an external task system, use external_task_* MCP tools. "
-            "If asked to persist a calendar event for later SQL queries, use db_record_calendar_cache. "
+            "Use external_task_* MCP tools for Google Tasks (RFC3339 due_iso when creating). "
+            "task_id values come from create/list responses. "
+            "If asked to persist a calendar event snapshot for later queries, use db_record_calendar_cache. "
             "Return concise JSON summaries of what changed."
         ),
         tools=tools,
