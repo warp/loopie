@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
 from typing import Any
@@ -12,16 +11,6 @@ from google.adk.tools.tool_context import ToolContext
 from . import db
 
 DEFAULT_USER_ID = os.environ.get("DEFAULT_USER_ID", "demo-user")
-
-
-def _parse_json_metadata(metadata_json: str | None) -> dict[str, Any]:
-    if not metadata_json or not metadata_json.strip():
-        return {}
-    try:
-        out = json.loads(metadata_json)
-        return out if isinstance(out, dict) else {}
-    except json.JSONDecodeError:
-        return {}
 
 
 async def db_upsert_note(
@@ -96,36 +85,3 @@ async def db_search_notes(
             limit,
         )
     return {"notes": [dict(r) for r in rows]}
-
-
-async def db_record_calendar_cache(
-    title: str,
-    start_iso: str,
-    end_iso: str,
-    external_event_id: str | None = None,
-    raw_json: str | None = None,
-    user_id: str = DEFAULT_USER_ID,
-    tool_context: ToolContext | None = None,
-) -> dict[str, Any]:
-    """Store a calendar event snapshot for cross-tool queries (optional workflow step)."""
-    del tool_context
-    pool = await db.get_pool()
-    raw: dict[str, Any] = _parse_json_metadata(raw_json)
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO calendar_event_cache
-              (user_id, external_event_id, title, start_at, end_at, raw)
-            VALUES ($1, $2, $3, CAST($4 AS TIMESTAMPTZ), CAST($5 AS TIMESTAMPTZ), $6::jsonb)
-            RETURNING id::text, title,
-              to_char(start_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS start_at,
-              to_char(end_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS end_at
-            """,
-            user_id,
-            external_event_id,
-            title,
-            start_iso,
-            end_iso,
-            json.dumps(raw),
-        )
-    return dict(row) if row else {}

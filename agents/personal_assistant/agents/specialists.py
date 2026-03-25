@@ -27,6 +27,22 @@ def _schedule_instruction(_ctx: ReadonlyContext) -> str:
     return f"{now_line_for_llm()}\n\n{_SCHEDULE_INSTRUCTION_STATIC}"
 
 
+_TASK_INSTRUCTION_STATIC = (
+    "You manage Google Tasks and read-only calendar access via MCP. "
+    "For tasks: use external_task_create (optional RFC3339 due_iso), external_task_list, "
+    "external_task_complete (task_id from create/list). "
+    "To see what's on the calendar when planning tasks or checking conflicts, call calendar_list_events "
+    "with ISO-8601 start_iso and end_iso for the window you need. "
+    "You do not create or edit calendar events; delegate scheduling to ScheduleSpecialist. "
+    "Always use REFERENCE_TIME when interpreting relative dates. "
+    "Return concise JSON summaries of what changed."
+)
+
+
+def _task_instruction(_ctx: ReadonlyContext) -> str:
+    return f"{now_line_for_llm()}\n\n{_TASK_INSTRUCTION_STATIC}"
+
+
 def build_schedule_agent() -> LlmAgent:
     tools = [
         *mcp_toolset_for_agent(
@@ -45,12 +61,12 @@ def build_schedule_agent() -> LlmAgent:
 
 def build_task_agent() -> LlmAgent:
     tools = [
-        db_tools.db_record_calendar_cache,
         *mcp_toolset_for_agent(
             tool_filter=[
                 "external_task_create",
                 "external_task_list",
                 "external_task_complete",
+                "calendar_list_events",
             ],
             name="task_mcp",
         ),
@@ -59,14 +75,9 @@ def build_task_agent() -> LlmAgent:
         model=MODEL,
         name="TaskSpecialist",
         description=(
-            "Manages Google Tasks via MCP and optional calendar event snapshots in the database."
+            "Manages Google Tasks via MCP and reads the calendar (list events) to plan work and spot conflicts."
         ),
-        instruction=(
-            "Use external_task_* MCP tools for Google Tasks (RFC3339 due_iso when creating). "
-            "task_id values come from create/list responses. "
-            "If asked to persist a calendar event snapshot for later queries, use db_record_calendar_cache. "
-            "Return concise JSON summaries of what changed."
-        ),
+        instruction=_task_instruction,
         tools=tools,
     )
 
