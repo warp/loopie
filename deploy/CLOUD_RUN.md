@@ -3,7 +3,7 @@
 This project has two runnable services:
 
 1. **ADK agent API** — multi-agent assistant (`agents/personal_assistant`).
-2. **MCP stub** (optional) — calendar / external tasks / notes for tool integration (`mcp_servers/`).
+2. **MCP server** (optional) — Google Calendar (when credentials are set), plus stub external tasks/notes (`mcp_servers/`).
 
 ## Prerequisites
 
@@ -20,7 +20,16 @@ Apply schema:
 psql "$DATABASE_URL" -f sql/migrations/001_init.sql
 ```
 
-## 2. MCP stub on Cloud Run (recommended for production)
+## 2. MCP server on Cloud Run (recommended for production)
+
+Enable the [Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) on your project if you use real calendar tools.
+
+**Credentials (mount as secrets on the MCP service only; treat refresh tokens like passwords):**
+
+- **Service account:** Create a key, store JSON in Secret Manager. Set `GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON` from the secret (or mount a file and set `GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH`). Share the target calendar with the service account’s email, then set `GOOGLE_CALENDAR_ID` to that calendar’s id (often an email address) — `primary` is only valid for the OAuth user’s own calendar.
+- **OAuth user:** Run [`mcp_servers/oauth_calendar_setup.py`](../mcp_servers/oauth_calendar_setup.py) locally once with a Desktop OAuth client `client_secret.json`, upload the resulting token JSON to Secret Manager, and set `GOOGLE_CALENDAR_TOKEN_JSON` on the MCP service.
+
+Optional: `USER_TIMEZONE` (e.g. `America/Los_Angeles`) for naive ISO times from tools.
 
 Build from the repository root:
 
@@ -30,14 +39,17 @@ docker push gcr.io/$GOOGLE_CLOUD_PROJECT/personal-agent-mcp
 gcloud run deploy personal-agent-mcp \
   --image gcr.io/$GOOGLE_CLOUD_PROJECT/personal-agent-mcp \
   --region $GOOGLE_CLOUD_REGION \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --set-secrets=GOOGLE_CALENDAR_TOKEN_JSON=YOUR_TOKEN_SECRET:latest
 ```
+
+Adjust secrets to match your auth choice (for example `GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON` instead). If no calendar credentials are set, `calendar_*` tools return a JSON error explaining required env vars.
 
 Note the service URL, then set the agent env var:
 
 `MCP_SSE_URL=https://<mcp-service-url>/sse`
 
-(Use the exact `/sse` path your server exposes; the stub uses FastMCP defaults.)
+(Use the exact `/sse` path your server exposes; FastMCP defaults apply.)
 
 ## 3. ADK agent on Cloud Run
 

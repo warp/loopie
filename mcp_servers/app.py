@@ -1,5 +1,6 @@
 """
-Stub MCP server: calendar, external task list, and external notes.
+MCP server: Google Calendar (when creds are set), plus stub external tasks/notes.
+
 Run SSE:  python -m mcp_servers.app sse   (default)
 Run stdio: python -m mcp_servers.app stdio
 
@@ -7,6 +8,13 @@ SSE URL for ADK: http://127.0.0.1:8765/sse (set MCP_SSE_URL)
 """
 
 from __future__ import annotations
+
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# So GOOGLE_CALENDAR_* and paths in .env apply when running: python -m mcp_servers.app sse
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 import asyncio
 import json
@@ -18,7 +26,8 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-_calendar: list[dict[str, Any]] = []
+from mcp_servers import calendar_google
+
 _tasks: dict[str, dict[str, Any]] = {}
 _notes: list[dict[str, Any]] = []
 
@@ -38,23 +47,13 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def calendar_create_event(title: str, start_iso: str, end_iso: str) -> str:
-        """Create a calendar event (stub). start_iso and end_iso must be ISO-8601."""
-        eid = str(uuid.uuid4())
-        ev = {
-            "event_id": eid,
-            "title": title,
-            "start_iso": start_iso,
-            "end_iso": end_iso,
-            "created_at": _now_iso(),
-        }
-        _calendar.append(ev)
-        return json.dumps(ev, indent=2)
+        """Create a Google Calendar event. start_iso and end_iso must be ISO-8601 (RFC3339)."""
+        return calendar_google.create_event(title, start_iso, end_iso)
 
     @mcp.tool()
     def calendar_list_events(start_iso: str, end_iso: str) -> str:
-        """List events overlapping the given window (stub; simple string compare)."""
-        out = [e for e in _calendar if e["start_iso"] <= end_iso and e["end_iso"] >= start_iso]
-        return json.dumps(out, indent=2)
+        """List Google Calendar events in the time window. start_iso and end_iso must be ISO-8601."""
+        return calendar_google.list_events(start_iso, end_iso)
 
     @mcp.tool()
     def external_task_create(title: str, due_iso: str | None = None) -> str:

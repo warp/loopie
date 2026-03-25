@@ -1,5 +1,8 @@
 .env
 .venv
+# Google OAuth client + token JSON (place files here; never commit)
+secrets/*
+!secrets/.gitkeep
 .adk
 __pycache__
 *.pyc
