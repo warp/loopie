@@ -57,7 +57,7 @@ From the repo root (with the same `google-adk` version you use locally):
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=your-project-id
-export GOOGLE_CLOUD_LOCATION=us-central1
+export GOOGLE_CLOUD_REGION=us-central1
 export GOOGLE_GENAI_USE_VERTEXAI=True
 
 adk deploy cloud_run agents/personal_assistant \
@@ -78,7 +78,7 @@ adk deploy cloud_run agents/personal_assistant \
   --session_service_uri=memory:// \
   -- \
   --vpc-connector=projects/$GOOGLE_CLOUD_PROJECT/locations/$GOOGLE_CLOUD_REGION/connectors/YOUR_CONNECTOR \
-  --set-env-vars=GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_LOCATION=$GOOGLE_CLOUD_REGION,MCP_SSE_URL=https://YOUR-MCP-RUN-URL/sse \
+  --set-env-vars=GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_REGION=$GOOGLE_CLOUD_REGION,MCP_SSE_URL=https://YOUR-MCP-RUN-URL/sse \
   --set-secrets=DATABASE_URL=DATABASE_URL:latest
 ```
 
@@ -96,7 +96,7 @@ PYTHONPATH=. MCP_PORT=8765 python -m mcp_servers.app sse
 # Terminal B — ADK Web (pick agent app "personal_assistant")
 export GOOGLE_GENAI_USE_VERTEXAI=True
 export GOOGLE_CLOUD_PROJECT=...
-export GOOGLE_CLOUD_LOCATION=us-central1
+export GOOGLE_CLOUD_REGION=us-central1
 export DATABASE_URL=postgresql://...
 export MCP_SSE_URL=http://127.0.0.1:8765/sse
 adk web agents --port 8080

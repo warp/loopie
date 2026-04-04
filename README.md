@@ -13,7 +13,7 @@ Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (G
 
 ## Quick start
 
-See [.env.example](.env.example) and [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md). For Vertex, set **`ADK_MODEL=gemini-2.0-flash-001`** (not `gemini-2.0-flash`) and a [supported region](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations) such as **`us-central1`** if you see publisher model 404s.
+See [.env.example](.env.example) and [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md). For Vertex, set **`ADK_MODEL=gemini-2.5-flash`** and a [supported region](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations) such as **`us-central1`** if you see publisher model 404s.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate

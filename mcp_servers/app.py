@@ -27,6 +27,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from mcp_servers import calendar_google
+from mcp_servers import people_google
 from mcp_servers import tasks_google
 
 _notes: list[dict[str, Any]] = []
@@ -69,6 +70,11 @@ def build_server() -> FastMCP:
     def external_task_complete(task_id: str) -> str:
         """Mark a Google Tasks task completed by task_id."""
         return tasks_google.complete_task(task_id)
+
+    @mcp.tool()
+    def external_contact_search(query: str, limit: int = 10) -> str:
+        """Search contacts via Google People API. Returns JSON list of normalized contacts."""
+        return people_google.search_contacts(query, limit)
 
     @mcp.tool()
     def external_note_create(title: str, body: str) -> str:

@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
-
 from google.adk.agents import LlmAgent
 
 from .agents.specialists import build_info_agent
 from .agents.specialists import build_schedule_agent
 from .agents.specialists import build_task_agent
-
-# Vertex expects a versioned publisher model id (see model-versions doc).
-MODEL = os.environ.get("ADK_MODEL", "gemini-2.0-flash-001")
+from .config import MODEL
 
 _schedule_agent = build_schedule_agent()
 _task_agent = build_task_agent()

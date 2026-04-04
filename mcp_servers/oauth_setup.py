@@ -1,6 +1,6 @@
 """One-time OAuth consent: writes a token file for GOOGLE_OAUTH_TOKEN_PATH.
 
-Requests Google Calendar and Google Tasks scopes so one token can drive both MCP integrations.
+Requests Google Calendar, Google Tasks, and Google Contacts (People API) scopes so one token can drive all MCP integrations.
 
 Usage:
   GOOGLE_OAUTH_CLIENT_SECRETS_PATH=/path/to/client_secret.json \\
@@ -24,9 +24,10 @@ from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 from mcp_servers.calendar_google import CALENDAR_SCOPES
+from mcp_servers.people_google import PEOPLE_SCOPES
 from mcp_servers.tasks_google import TASKS_SCOPES
 
-OAUTH_SCOPES = list(CALENDAR_SCOPES) + list(TASKS_SCOPES)
+OAUTH_SCOPES = list(CALENDAR_SCOPES) + list(TASKS_SCOPES) + list(PEOPLE_SCOPES)
 
 
 def _repo_root() -> Path:

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import os
-
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 
+from ..config import MODEL
 from ..tools import db_tools
 from ..tools.mcp_factory import mcp_toolset_for_agent
 from ..tools.time_context import now_line_for_llm
-
-MODEL = os.environ.get("ADK_MODEL", "gemini-2.5-flash")
 
 _SCHEDULE_INSTRUCTION_STATIC = (
     "You manage the user's calendar using MCP tools only. "
@@ -41,6 +38,19 @@ _TASK_INSTRUCTION_STATIC = (
 
 def _task_instruction(_ctx: ReadonlyContext) -> str:
     return f"{now_line_for_llm()}\n\n{_TASK_INSTRUCTION_STATIC}"
+
+
+_INFO_INSTRUCTION_STATIC = (
+    "Use db_upsert_note and db_search_notes for canonical notes in AlloyDB. "
+    "tags_csv is comma-separated. "
+    "Use external_note_* MCP tools when the user explicitly asks for the external notes integration. "
+    "Prefer the database for durable project notes. "
+    "Use REFERENCE_TIME when the user refers to relative dates (e.g. notes from last week)."
+)
+
+
+def _info_instruction(_ctx: ReadonlyContext) -> str:
+    return f"{now_line_for_llm()}\n\n{_INFO_INSTRUCTION_STATIC}"
 
 
 def build_schedule_agent() -> LlmAgent:
@@ -95,11 +105,6 @@ def build_info_agent() -> LlmAgent:
         model=MODEL,
         name="InfoSpecialist",
         description="Stores and searches notes in the database and external notes MCP.",
-        instruction=(
-            "Use db_upsert_note and db_search_notes for canonical notes in AlloyDB. "
-            "tags_csv is comma-separated. "
-            "Use external_note_* MCP tools when the user explicitly asks for the external notes integration. "
-            "Prefer the database for durable project notes."
-        ),
+        instruction=_info_instruction,
         tools=tools,
     )

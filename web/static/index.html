@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personal Agent</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="title">Personal Agent</div>
+        <div class="subtitle">Type <code>@</code> to mention a contact.</div>
+      </header>
+
+      <main class="main">
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <div class="composer">
+          <label class="composerLabel" for="composerInput">Message</label>
+          <textarea id="composerInput" class="composerInput" rows="3" placeholder="Ask me to plan, schedule, or take notes..."></textarea>
+
+          <div id="mentionDropdown" class="mentionDropdown hidden" role="listbox" aria-label="Mention suggestions"></div>
+
+          <div class="composerActions">
+            <button id="sendBtn" class="sendBtn">Send</button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
