@@ -42,7 +42,7 @@ def mcp_toolset_for_agent(
         if args_env:
             args_list = args_env.split()
         else:
-            # Default: run bundled stub server (stdio) — repo root must be on PYTHONPATH.
+            # Default: run bundled MCP server (stdio) — repo root must be on PYTHONPATH.
             args_list = ["-m", "mcp_servers.app", "stdio"]
         logger.info("MCP stdio: command=%s args=%s", cmd, args_list)
         return [

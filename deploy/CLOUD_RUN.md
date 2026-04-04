@@ -3,7 +3,7 @@
 This project has two runnable services:
 
 1. **ADK agent API** — multi-agent assistant (`agents/loopie`).
-2. **MCP server** (optional) — Google Calendar and Google Tasks (when credentials are set), plus stub external notes (`mcp_servers/`).
+2. **MCP server** (optional) — Google Calendar and Google Tasks (when credentials are set), plus in-memory external notes (`mcp_servers/`).
 
 ## Prerequisites
 

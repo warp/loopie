@@ -118,7 +118,7 @@ def _normalize_event(ev: dict[str, Any]) -> dict[str, Any]:
 
 
 def create_event(title: str, start_iso: str, end_iso: str) -> str:
-    """Create a calendar event; return JSON matching the former stub shape (+ html_link)."""
+    """Create a calendar event; return JSON in the same normalized shape as list_events (+ html_link)."""
     svc = _calendar_service()
     if svc is None:
         return credentials_missing_response()
@@ -152,7 +152,7 @@ def create_event(title: str, start_iso: str, end_iso: str) -> str:
 
 
 def list_events(start_iso: str, end_iso: str) -> str:
-    """List events in [timeMin, timeMax); normalize to stub-like records."""
+    """List events in [timeMin, timeMax); normalize to the shared event record shape."""
     svc = _calendar_service()
     if svc is None:
         return credentials_missing_response()

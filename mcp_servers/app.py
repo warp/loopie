@@ -1,5 +1,5 @@
 """
-MCP server: Google Calendar and Google Tasks (when creds are set), plus stub external notes.
+MCP server: Google Calendar and Google Tasks (when creds are set), plus in-memory external notes.
 
 Run SSE:  python -m mcp_servers.app sse   (default)
 Run stdio: python -m mcp_servers.app stdio
@@ -41,7 +41,7 @@ def build_server() -> FastMCP:
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", os.environ.get("PORT", "8765")))
     mcp = FastMCP(
-        "loopie-stub-mcp",
+        "loopie-mcp",
         host=host,
         port=port,
     )
@@ -78,7 +78,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def external_note_create(title: str, body: str) -> str:
-        """Create a note in the external notes integration (stub)."""
+        """Create a note in the external notes integration (in-memory)."""
         nid = str(uuid.uuid4())
         note = {"note_id": nid, "title": title, "body": body, "created_at": _now_iso()}
         _notes.append(note)
@@ -86,7 +86,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def external_note_search(query: str) -> str:
-        """Search external notes by substring in title or body (stub)."""
+        """Search external notes by substring in title or body (in-memory)."""
         q = query.lower()
         hits = [n for n in _notes if q in n["title"].lower() or q in n["body"].lower()]
         return json.dumps(hits, indent=2)

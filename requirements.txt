@@ -1,4 +1,4 @@
-# Local development: agent + MCP stub + web
+# Local development: agent + MCP server + web
 -r agents/loopie/requirements.txt
 mcp[cli]>=1.2.0
 uvicorn>=0.30.0

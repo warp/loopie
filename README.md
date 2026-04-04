@@ -7,7 +7,7 @@ Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (G
 | Path | Purpose |
 |------|---------|
 | [agents/loopie/](agents/loopie/) | ADK app: `root_agent`, tools, specialists |
-| [mcp_servers/](mcp_servers/) | MCP server (Google Calendar & Tasks; stub notes) over SSE or stdio |
+| [mcp_servers/](mcp_servers/) | MCP server (Google Calendar & Tasks; in-memory external notes) over SSE or stdio |
 | [sql/migrations/](sql/migrations/) | AlloyDB-compatible schema |
 | [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md) | Cloud Run, VPC, secrets, `adk deploy` |
 
@@ -36,7 +36,7 @@ adk deploy cloud_run agents/loopie --project=... --region=...
 
 ### `ConnectError` / `Failed to create MCP session`
 
-`MCP_SSE_URL` must reach a **running** MCP SSE server. If nothing listens on that host/port, ADK fails when loading tools. Fix: start the stub from the repo root (`PYTHONPATH=. MCP_PORT=8765 python -m mcp_servers.app sse`) and keep the URL in sync, **or** set **`MCP_DISABLED=1`** in `.env` to turn off MCP toolsets until the server is up.
+`MCP_SSE_URL` must reach a **running** MCP SSE server. If nothing listens on that host/port, ADK fails when loading tools. Fix: start the MCP server from the repo root (`PYTHONPATH=. MCP_PORT=8765 python -m mcp_servers.app sse`) and keep the URL in sync, **or** set **`MCP_DISABLED=1`** in `.env` to turn off MCP toolsets until the server is up.
 
 Omitting `MCP_SSE_URL` also disables MCP; database tools still work when `DATABASE_URL` is set.
 
