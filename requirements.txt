@@ -1,5 +1,5 @@
 # Local development: agent + MCP stub + web
--r agents/personal_assistant/requirements.txt
+-r agents/loopie/requirements.txt
 mcp[cli]>=1.2.0
 uvicorn>=0.30.0
 python-dotenv>=1.0.0

@@ -1,4 +1,4 @@
-# Personal agent (ADK + Vertex AI + AlloyDB + Cloud Run)
+# Loopie (ADK + Vertex AI + AlloyDB + Cloud Run)
 
 Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (Google Tasks MCP), and **notes** (database + optional external-notes MCP).
 
@@ -6,7 +6,7 @@ Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (G
 
 | Path | Purpose |
 |------|---------|
-| [agents/personal_assistant/](agents/personal_assistant/) | ADK app: `root_agent`, tools, specialists |
+| [agents/loopie/](agents/loopie/) | ADK app: `root_agent`, tools, specialists |
 | [mcp_servers/](mcp_servers/) | MCP server (Google Calendar & Tasks; stub notes) over SSE or stdio |
 | [sql/migrations/](sql/migrations/) | AlloyDB-compatible schema |
 | [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md) | Cloud Run, VPC, secrets, `adk deploy` |
@@ -29,7 +29,7 @@ adk web agents
 Deploy only the agent folder:
 
 ```bash
-adk deploy cloud_run agents/personal_assistant --project=... --region=...
+adk deploy cloud_run agents/loopie --project=... --region=...
 ```
 
 ## Troubleshooting

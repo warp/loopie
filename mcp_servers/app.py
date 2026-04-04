@@ -41,7 +41,7 @@ def build_server() -> FastMCP:
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", os.environ.get("PORT", "8765")))
     mcp = FastMCP(
-        "personal-agent-stub-mcp",
+        "loopie-stub-mcp",
         host=host,
         port=port,
     )

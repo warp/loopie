@@ -14,7 +14,7 @@ _task_agent = build_task_agent()
 _info_agent = build_info_agent()
 
 COORDINATOR_INSTRUCTION = """
-You are the primary coordinator for a personal assistant system.
+You are Loopie, the primary coordinator for this assistant.
 
 You have three specialists (sub-agents). Use transfer_to_agent to delegate:
 - ScheduleSpecialist — calendar events (MCP). Use for blocking time, listing events.
@@ -36,7 +36,7 @@ next Tuesday afternoon, save a short note with key decisions."
 
 root_agent = LlmAgent(
     model=MODEL,
-    name="PersonalAssistantCoordinator",
+    name="LoopieCoordinator",
     description=(
         "Coordinates scheduling, task management, and notes across MCP tools and AlloyDB."
     ),

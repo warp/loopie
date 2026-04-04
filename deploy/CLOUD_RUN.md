@@ -2,7 +2,7 @@
 
 This project has two runnable services:
 
-1. **ADK agent API** — multi-agent assistant (`agents/personal_assistant`).
+1. **ADK agent API** — multi-agent assistant (`agents/loopie`).
 2. **MCP server** (optional) — Google Calendar and Google Tasks (when credentials are set), plus stub external notes (`mcp_servers/`).
 
 ## Prerequisites
@@ -34,10 +34,10 @@ Optional: `USER_TIMEZONE` (e.g. `America/Los_Angeles`) for naive ISO times from 
 Build from the repository root:
 
 ```bash
-docker build -f mcp_servers/Dockerfile -t gcr.io/$GOOGLE_CLOUD_PROJECT/personal-agent-mcp .
-docker push gcr.io/$GOOGLE_CLOUD_PROJECT/personal-agent-mcp
-gcloud run deploy personal-agent-mcp \
-  --image gcr.io/$GOOGLE_CLOUD_PROJECT/personal-agent-mcp \
+docker build -f mcp_servers/Dockerfile -t gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp .
+docker push gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp
+gcloud run deploy loopie-mcp \
+  --image gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp \
   --region $GOOGLE_CLOUD_REGION \
   --allow-unauthenticated \
   --set-secrets=GOOGLE_OAUTH_TOKEN_JSON=YOUR_TOKEN_SECRET:latest
@@ -60,21 +60,21 @@ export GOOGLE_CLOUD_PROJECT=your-project-id
 export GOOGLE_CLOUD_REGION=us-central1
 export GOOGLE_GENAI_USE_VERTEXAI=True
 
-adk deploy cloud_run agents/personal_assistant \
+adk deploy cloud_run agents/loopie \
   --project=$GOOGLE_CLOUD_PROJECT \
   --region=$GOOGLE_CLOUD_REGION \
-  --service_name=personal-assistant-adk \
-  --app_name=personal_assistant \
+  --service_name=loopie-adk \
+  --app_name=loopie \
   --session_service_uri=memory://
 ```
 
 Pass extra `gcloud run deploy` flags after `--`, for example VPC and secrets:
 
 ```bash
-adk deploy cloud_run agents/personal_assistant \
+adk deploy cloud_run agents/loopie \
   --project=$GOOGLE_CLOUD_PROJECT \
   --region=$GOOGLE_CLOUD_REGION \
-  --service_name=personal-assistant-adk \
+  --service_name=loopie-adk \
   --session_service_uri=memory:// \
   -- \
   --vpc-connector=projects/$GOOGLE_CLOUD_PROJECT/locations/$GOOGLE_CLOUD_REGION/connectors/YOUR_CONNECTOR \
@@ -93,7 +93,7 @@ pip install -r requirements.txt
 # Terminal A — MCP SSE
 PYTHONPATH=. MCP_PORT=8765 python -m mcp_servers.app sse
 
-# Terminal B — ADK Web (pick agent app "personal_assistant")
+# Terminal B — ADK Web (pick agent app "loopie")
 export GOOGLE_GENAI_USE_VERTEXAI=True
 export GOOGLE_CLOUD_PROJECT=...
 export GOOGLE_CLOUD_REGION=us-central1

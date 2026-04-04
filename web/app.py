@@ -25,12 +25,12 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from agents.personal_assistant.agent import root_agent
+from agents.loopie.agent import root_agent
 from mcp_servers import people_google
 
 logger = logging.getLogger(__name__)
 
-APP_NAME = os.environ.get("ADK_APP_NAME", "personal_agent_web")
+APP_NAME = os.environ.get("ADK_APP_NAME", "loopie_web")
 DEFAULT_USER_ID = os.environ.get("DEFAULT_USER_ID", "demo-user")
 
 session_service = InMemorySessionService()
@@ -74,7 +74,7 @@ async def _lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Personal Agent Web", version="0.1.0", lifespan=_lifespan)
+app = FastAPI(title="Loopie Web", version="0.1.0", lifespan=_lifespan)
 
 static_dir = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
