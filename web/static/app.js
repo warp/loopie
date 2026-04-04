@@ -159,7 +159,6 @@ function openMentionDropdown(atIdx, caretIdx, token) {
       // If the endpoint errors (missing creds, People API disabled, etc) show a single-row error state.
       mentionState.items = [
         {
-          contact_id: "",
           display_name: "Contacts unavailable",
           emails: [],
           phones: [],

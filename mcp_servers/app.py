@@ -57,6 +57,30 @@ def build_server() -> FastMCP:
         return calendar_google.list_events(start_iso, end_iso)
 
     @mcp.tool()
+    def calendar_update_event(
+        event_id: str,
+        title: str | None = None,
+        start_iso: str | None = None,
+        end_iso: str | None = None,
+        location: str | None = None,
+        description: str | None = None,
+    ) -> str:
+        """Update an existing calendar event by event_id (from calendar_list_events). Omit optional fields to leave them unchanged. start_iso/end_iso are ISO-8601; timed events only."""
+        return calendar_google.update_event(
+            event_id,
+            title=title,
+            start_iso=start_iso,
+            end_iso=end_iso,
+            location=location,
+            description=description,
+        )
+
+    @mcp.tool()
+    def calendar_invite_to_event(event_id: str, attendee_emails: str) -> str:
+        """Add invitees to an existing event. event_id from calendar_list_events. attendee_emails: comma-separated email addresses; sends calendar invitations."""
+        return calendar_google.invite_to_event(event_id, attendee_emails)
+
+    @mcp.tool()
     def external_task_create(title: str, due_iso: str | None = None) -> str:
         """Create a task in Google Tasks. due_iso is optional RFC3339."""
         return tasks_google.create_task(title, due_iso)
@@ -73,7 +97,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def external_contact_search(query: str, limit: int = 10) -> str:
-        """Search contacts via Google People API. Returns JSON list of normalized contacts."""
+        """Search the user's Google Contacts (My Contacts): matches name, email, or phone substring. Returns display_name, emails, phones, primary_email."""
         return people_google.search_contacts(query, limit)
 
     @mcp.tool()
