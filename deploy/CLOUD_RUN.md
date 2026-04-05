@@ -103,3 +103,9 @@ adk web agents --port 8080
 ```
 
 If you omit `MCP_SSE_URL`, calendar and external MCP tools are disabled; database tools still work when `DATABASE_URL` is set.
+
+## 5. Scalability and tenancy
+
+- **Single-tenant today** — The solution is oriented around one primary Google identity and a default user id (`DEFAULT_USER_ID` in `.env.example`). Horizontal scale on Cloud Run adds replicas of the same configuration; it does not by itself turn the app into a multi-customer SaaS.
+- **OAuth for many users** — To support multiple end users, the OAuth consent and token storage flow would need to be **extended** so each user (or tenant) has **their own refresh/access tokens** (and likely per-user routing from the agent or API into the MCP layer), instead of a single shared `GOOGLE_OAUTH_TOKEN_*` on the MCP service.
+- **Notes database** — For strong isolation and growth at scale, the notes store would need **partitioning** (or an equivalent tenancy strategy: schemas per tenant, row-level tenant keys with partitioning, or separate databases) aligned with how you shard users and backup/restore.

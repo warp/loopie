@@ -1,3 +1,4 @@
+.DS_Store
 .env
 .venv
 # Google OAuth client + token JSON (place files here; never commit)

@@ -32,6 +32,10 @@ Deploy only the agent folder:
 adk deploy cloud_run agents/loopie --project=... --region=...
 ```
 
+## Scalability and tenancy
+
+The app is **single-tenant** as shipped (one default user id and typically one Google OAuth token for MCP). Extending to many users requires **per-user OAuth tokens** and a **partitioned or otherwise tenant-scoped notes database**. See [deploy/CLOUD_RUN.md §5](deploy/CLOUD_RUN.md#5-scalability-and-tenancy).
+
 ## Troubleshooting
 
 ### `ConnectError` / `Failed to create MCP session`
