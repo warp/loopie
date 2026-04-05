@@ -32,7 +32,9 @@ _SCHEDULE_INSTRUCTION_STATIC = (
     "fragments to enrich with saved contact details. When you report contact matches, use each person's "
     "display_name and email (primary_email or emails); do not use or mention Google contact resource IDs. "
     "Summarize time, title, location/link, attendees, and contact highlights. If an event has no attendees, "
-    "prep from title, location, and description and note that no guest list was on the event."
+    "prep from title, location, and description and note that no guest list was on the event.\n"
+    "Every calendar_list_events item includes event_id. Include each relevant event_id in your handoff to "
+    "the coordinator so notes can be linked and retrieved for that meeting."
 )
 
 
@@ -63,20 +65,19 @@ def _task_instruction(_ctx: ReadonlyContext) -> str:
 
 
 _INFO_INSTRUCTION_STATIC = (
-    "Use db_upsert_note and db_search_notes for canonical notes in AlloyDB. "
-    "tags_csv is comma-separated. "
-    "Use external_note_* MCP tools when the user explicitly asks for the external notes integration. "
-    "Prefer the database for durable project notes. "
-    "Use REFERENCE_TIME when the user refers to relative dates (e.g. notes from last week).\n"
-    "Meeting prep (critical): you often receive partial context from the coordinator. "
-    "Always call db_search_notes_by_keywords FIRST with a generous comma-separated list built from "
-    "everything relevant: significant words from each meeting title (skip filler like 'sync','weekly' only if "
-    "you have richer terms), attendee given and family names, email local-parts and company/domain hints, "
-    "location, and phrases from the event description. One call with 8–20 distinct terms beats one vague "
-    "db_search_notes query. "
-    "If results are empty, run db_search_notes again on the 2–3 strongest specific terms (project codenames, "
-    "person surnames). "
-    "Report returned notes with title, tags, and body_preview; say if nothing matched."
+    "AlloyDB is canonical: db_upsert_note, db_search_notes, db_search_notes_by_keywords, db_notes_for_calendar_event. "
+    "tags_csv is comma-separated. Set calendar_event_id on db_upsert_note when the note is tied to a Google "
+    "Calendar event_id from calendar JSON. Use external_note_* only when the user explicitly asks for that integration. "
+    "Use REFERENCE_TIME for relative dates.\n"
+    "The user often does not say the word 'notes'—still run searches and **surface results in your reply** "
+    "(summaries or short quotes from body_preview). Lead with a line like 'From your saved notes:' when you "
+    "have hits; if nothing matched, say 'No matching saved notes found' so the coordinator can merge honestly.\n"
+    "Always check before you write or before a substantive answer. Order: (1) event_id in handoff or message → "
+    "db_notes_for_calendar_event for each distinct id. (2) db_search_notes_by_keywords with a broad CSV from "
+    "titles, names, companies, project codes, tags, and request keywords. (3) If thin, db_search_notes on "
+    "2–4 strong phrases. (4) Then db_upsert_note or finalize, merging findings into the answer—do not hide "
+    "useful notes in tool output only; repeat the gist for the user.\n"
+    "Exception: skip searches only for pure external_note_* with no AlloyDB angle, or a trivial ack."
 )
 
 
@@ -136,6 +137,7 @@ def build_task_agent() -> LlmAgent:
 
 def build_info_agent() -> LlmAgent:
     tools = [
+        db_tools.db_notes_for_calendar_event,
         db_tools.db_search_notes_by_keywords,
         db_tools.db_search_notes,
         db_tools.db_upsert_note,
@@ -148,8 +150,9 @@ def build_info_agent() -> LlmAgent:
         model=MODEL,
         name="InfoSpecialist",
         description=(
-            "Stores and searches notes in AlloyDB (db_upsert_note, db_search_notes, "
-            "db_search_notes_by_keywords for meeting prep). External notes MCP when asked."
+            "Retrieves saved AlloyDB context for the user (meeting prep, projects, people)—not only when they "
+            "ask for 'notes'. Searches by event_id and keywords, returns excerpts in replies; can upsert with "
+            "calendar_event_id. External notes MCP when explicitly requested."
         ),
         instruction=_info_instruction,
         tools=tools,

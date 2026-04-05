@@ -24,7 +24,7 @@ async def get_pool() -> asyncpg.Pool:
     if not url:
         raise RuntimeError(
             "DATABASE_URL is not set. Point it at AlloyDB (or local Postgres) "
-            "after applying sql/migrations/001_init.sql."
+            "after applying sql/migrations (001_init.sql, 002_notes_calendar_event.sql, …)."
         )
     _pool = await asyncpg.create_pool(url, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "5")))
     logger.info("Database pool created")
