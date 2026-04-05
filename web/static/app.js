@@ -16,6 +16,41 @@ let mentionState = {
   debounce: null,
 };
 
+/** First email from API (primary_email or emails[0]). */
+function contactPrimaryEmail(c) {
+  const e = c.primary_email || (c.emails && c.emails[0]);
+  return (e && String(e).trim()) || "";
+}
+
+/** Title + subtitle for dropdown: name on top, email or phone below when it adds context. */
+function contactLinesForDropdown(c) {
+  if (c._error)
+    return { title: c.display_name || "Contacts unavailable", subtitle: "" };
+  const name = (c.display_name || "").trim();
+  const email = contactPrimaryEmail(c);
+  const phones = c.phones || [];
+  const phone = phones[0] ? String(phones[0]).trim() : "";
+  if (name) {
+    const subtitle =
+      email && email !== name ? email : !email && phone ? phone : "";
+    return { title: name, subtitle };
+  }
+  if (email)
+    return { title: email, subtitle: phone && phone !== email ? phone : "" };
+  if (phone) return { title: phone, subtitle: "" };
+  return { title: "(no name)", subtitle: "" };
+}
+
+/** Short hint when there are multiple emails or phones (e.g. "+1 email"). */
+function contactExtraBadge(c) {
+  const ne = (c.emails && c.emails.length) || 0;
+  const np = (c.phones && c.phones.length) || 0;
+  const bits = [];
+  if (ne > 1) bits.push(`+${ne - 1} email${ne === 2 ? "" : "s"}`);
+  if (np > 1) bits.push(`+${np - 1} number${np === 2 ? "" : "s"}`);
+  return bits.join(" · ");
+}
+
 function addMessage(role, text) {
   const msg = document.createElement("div");
   msg.className = "msg";
@@ -75,21 +110,28 @@ function renderDropdown() {
     const item = document.createElement("div");
     item.className = "mentionItem";
     item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", idx === mentionState.selectedIdx ? "true" : "false");
+    item.setAttribute(
+      "aria-selected",
+      idx === mentionState.selectedIdx ? "true" : "false",
+    );
 
+    const { title, subtitle } = contactLinesForDropdown(c);
     const left = document.createElement("div");
+    left.className = "mentionLeft";
     const name = document.createElement("div");
     name.className = "mentionName";
-    name.textContent = c.display_name || "(no name)";
-    const meta = document.createElement("div");
-    meta.className = "mentionMeta";
-    meta.textContent = (c.emails && c.emails[0]) || (c.phones && c.phones[0]) || "";
+    name.textContent = title;
     left.appendChild(name);
-    left.appendChild(meta);
+    if (subtitle) {
+      const meta = document.createElement("div");
+      meta.className = "mentionMeta";
+      meta.textContent = subtitle;
+      left.appendChild(meta);
+    }
 
     const right = document.createElement("div");
     right.className = "mentionRight";
-    right.textContent = c.emails && c.emails.length ? `${c.emails.length} email(s)` : "";
+    right.textContent = contactExtraBadge(c);
 
     item.appendChild(left);
     item.appendChild(right);
@@ -106,12 +148,17 @@ function renderDropdown() {
 }
 
 function formatMention(contact) {
+  if (contact._error) return "@contact";
   const name = (contact.display_name || "").trim();
+  const email = contactPrimaryEmail(contact);
+  const phone =
+    contact.phones && contact.phones[0] ? String(contact.phones[0]).trim() : "";
+  // Name + email reads like a mail header: @Name (email) — avoids @@ when email is alone.
+  if (name && email) return `@${name} (${email})`;
+  if (name && phone) return `@${name} (${phone})`;
   if (name) return `@${name}`;
-  const email = (contact.emails && contact.emails[0]) || "";
-  if (email) return `@${email}`;
-  const phone = (contact.phones && contact.phones[0]) || "";
-  if (phone) return `@${phone}`;
+  if (email) return email;
+  if (phone) return phone;
   return "@contact";
 }
 
@@ -133,7 +180,9 @@ async function fetchContacts(token) {
   if (mentionState.abort) mentionState.abort.abort();
   mentionState.abort = new AbortController();
   const qs = new URLSearchParams({ q: token, limit: "10" });
-  const res = await fetch(`/api/contacts?${qs.toString()}`, { signal: mentionState.abort.signal });
+  const res = await fetch(`/api/contacts?${qs.toString()}`, {
+    signal: mentionState.abort.signal,
+  });
   if (!res.ok) throw new Error(`contacts_http_${res.status}`);
   return await res.json();
 }
@@ -183,25 +232,41 @@ inputEl.addEventListener("input", () => {
 });
 
 inputEl.addEventListener("keydown", (e) => {
-  if (!mentionState.open) return;
-
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    mentionState.selectedIdx = Math.min(mentionState.selectedIdx + 1, mentionState.items.length - 1);
-    renderDropdown();
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    mentionState.selectedIdx = Math.max(mentionState.selectedIdx - 1, 0);
-    renderDropdown();
-  } else if (e.key === "Enter") {
-    // If dropdown open, Enter selects mention; Shift+Enter makes a newline
-    if (!e.shiftKey) {
+  // Mention dropdown must be handled in the same handler as send-on-Enter; otherwise the first
+  // handler calls hideDropdown() and the second sees mentionState.open === false and submits.
+  if (mentionState.open) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      mentionState.selectedIdx = Math.min(
+        mentionState.selectedIdx + 1,
+        mentionState.items.length - 1,
+      );
+      renderDropdown();
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      mentionState.selectedIdx = Math.max(mentionState.selectedIdx - 1, 0);
+      renderDropdown();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       applyMentionSelection();
+      return;
     }
-  } else if (e.key === "Escape") {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      hideDropdown();
+      return;
+    }
+    // Other keys (keep typing the @-query) — default behavior
+    return;
+  }
+
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    hideDropdown();
+    sendMessage();
   }
 });
 
@@ -242,12 +307,5 @@ async function sendMessage() {
 }
 
 sendBtn.addEventListener("click", sendMessage);
-inputEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey && !mentionState.open) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
 
 addMessage("agent", "Hi — ask me something. Use @ to mention a contact.");
-
