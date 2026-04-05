@@ -77,7 +77,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def calendar_invite_to_event(event_id: str, attendee_emails: str) -> str:
-        """Add invitees to an existing event. event_id from calendar_list_events. attendee_emails: comma-separated email addresses; sends calendar invitations."""
+        """Add invitees to an existing event. event_id from calendar_list_events. attendee_emails: comma-separated. Optionally checks each new invitee's free/busy (when their calendar is visible) so the event time does not overlap their busy time; see INVITE_* env vars."""
         return calendar_google.invite_to_event(event_id, attendee_emails)
 
     @mcp.tool()

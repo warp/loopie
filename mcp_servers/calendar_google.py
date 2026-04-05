@@ -572,6 +572,62 @@ def update_event(
     return json.dumps(out, indent=2)
 
 
+def _get_event_timed_bounds(ev: dict[str, Any]) -> tuple[datetime, datetime] | None:
+    """Start/end datetimes for a timed event; None for all-day or invalid."""
+    start = ev.get("start") or {}
+    end = ev.get("end") or {}
+    if "dateTime" not in start or "dateTime" not in end:
+        return None
+    try:
+        return _parse_api_dt(start["dateTime"]), _parse_api_dt(end["dateTime"])
+    except (ValueError, TypeError):
+        return None
+
+
+def _freebusy_query_calendars(
+    svc: Any,
+    tmin: datetime,
+    tmax: datetime,
+    calendar_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Free/busy for each calendar id: {busy: merged intervals, errors: optional list}."""
+    ids = list(dict.fromkeys(calendar_ids))
+    if not ids:
+        return {}
+    body: dict[str, Any] = {
+        "timeMin": _to_rfc3339(tmin),
+        "timeMax": _to_rfc3339(tmax),
+        "timeZone": _user_timezone(),
+        "items": [{"id": x} for x in ids],
+    }
+    resp = svc.freebusy().query(body=body).execute()
+    cals = resp.get("calendars") or {}
+    out: dict[str, dict[str, Any]] = {}
+    for cid in ids:
+        raw: dict[str, Any] | None = None
+        for k, v in cals.items():
+            if isinstance(k, str) and k.lower() == cid.lower():
+                raw = v if isinstance(v, dict) else None
+                break
+        if raw is None:
+            out[cid] = {"busy": [], "errors": [{"reason": "calendarNotInResponse"}]}
+            continue
+        errs = raw.get("errors")
+        busy_raw = raw.get("busy") or []
+        intervals: list[tuple[datetime, datetime]] = []
+        for b in busy_raw:
+            if isinstance(b, dict):
+                try:
+                    intervals.append((_parse_api_dt(b["start"]), _parse_api_dt(b["end"])))
+                except (KeyError, ValueError):
+                    continue
+        out[cid] = {
+            "busy": _merge_busy_intervals(intervals),
+            "errors": errs,
+        }
+    return out
+
+
 def _parse_invitee_emails(attendee_emails: str) -> list[str]:
     """Split comma/semicolon/newline-separated list; strip; require '@'; dedupe case-insensitively."""
     raw = (attendee_emails or "").replace(";", ",").replace("\n", ",")
@@ -590,7 +646,11 @@ def _parse_invitee_emails(attendee_emails: str) -> list[str]:
 
 
 def invite_to_event(event_id: str, attendee_emails: str) -> str:
-    """Add guests to an existing event by email. attendee_emails: comma-separated (or semicolon/newline). Sends invite notifications."""
+    """Add guests to an existing event by email. attendee_emails: comma-separated (or semicolon/newline). Sends invite notifications.
+
+    Optionally checks each new invitee's calendar via FreeBusy (when shared with the authenticated
+    user) so the event time does not overlap their busy intervals. See INVITE_* env vars.
+    """
     svc = _calendar_service()
     if svc is None:
         return credentials_missing_response()
@@ -632,17 +692,89 @@ def invite_to_event(event_id: str, attendee_emails: str) -> str:
             existing_lower.add(em.lower())
         merged.append(dict(a))
 
-    added: list[str] = []
-    for em in new_addrs:
-        if em.lower() not in existing_lower:
-            merged.append({"email": em})
-            existing_lower.add(em.lower())
-            added.append(em)
+    to_add = [em for em in new_addrs if em.lower() not in existing_lower]
 
-    if not added:
+    if not to_add:
         out = _normalize_event(existing)
         out["invites_skipped"] = "all_emails_already_attendees"
         return json.dumps(out, indent=2)
+
+    check_fb = os.environ.get("INVITE_CHECK_ATTENDEE_FREEBUSY", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+    block_busy = os.environ.get("INVITE_BLOCK_ON_ATTENDEE_BUSY", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+    allow_unknown = os.environ.get("INVITE_ALLOW_FREEBUSY_UNAVAILABLE", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+    availability_meta: dict[str, Any] = {}
+    if check_fb:
+        bounds = _get_event_timed_bounds(existing)
+        if bounds is None:
+            availability_meta["attendee_availability"] = "skipped_not_timed_event"
+        else:
+            es, ee = bounds
+            fb = _freebusy_query_calendars(svc, es, ee, to_add)
+            busy_conflicts: list[str] = []
+            unverified: list[str] = []
+            for em in to_add:
+                info = fb.get(em)
+                if info is None:
+                    for k, v in fb.items():
+                        if k.lower() == em.lower():
+                            info = v
+                            break
+                if not isinstance(info, dict):
+                    unverified.append(em)
+                    continue
+                errs = info.get("errors")
+                busy = info.get("busy") or []
+                if errs:
+                    unverified.append(em)
+                    continue
+                if _interval_overlaps_busy(es, ee, busy):
+                    busy_conflicts.append(em)
+            if busy_conflicts and block_busy:
+                return json.dumps(
+                    {
+                        "error": "attendee_busy",
+                        "detail": (
+                            "These invitees have a conflicting busy block during this event's time "
+                            "(based on their free/busy visibility to this account)."
+                        ),
+                        "conflicting_emails": busy_conflicts,
+                    },
+                    indent=2,
+                )
+            if busy_conflicts and not block_busy:
+                availability_meta["attendee_busy_warning_nonblocking"] = busy_conflicts
+            if unverified:
+                availability_meta["attendee_freebusy_unverified"] = unverified
+                if not allow_unknown:
+                    return json.dumps(
+                        {
+                            "error": "attendee_calendar_not_visible",
+                            "detail": (
+                                "Could not read free/busy for some invitees (calendar not shared or "
+                                "no access). Set INVITE_ALLOW_FREEBUSY_UNAVAILABLE=1 to invite anyway."
+                            ),
+                            "emails": unverified,
+                        },
+                        indent=2,
+                    )
+
+    for em in to_add:
+        merged.append({"email": em})
+        existing_lower.add(em.lower())
+    added = list(to_add)
 
     body = {"attendees": merged}
     try:
@@ -666,6 +798,8 @@ def invite_to_event(event_id: str, attendee_emails: str) -> str:
     out = _normalize_event(updated)
     out["updated_at"] = updated.get("updated")
     out["invited_emails"] = added
+    if availability_meta:
+        out["invite_availability"] = availability_meta
     return json.dumps(out, indent=2)
 
 
