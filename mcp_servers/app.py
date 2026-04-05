@@ -48,7 +48,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def calendar_create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
-        """Create a Google Calendar event. start_iso is ISO-8601, or date-only YYYY-MM-DD to pick the earliest free slot within BUSINESS_HOURS (env) using free/busy. Omit end_iso for default duration or for date-only mode."""
+        """Create a Google Calendar event. start_iso is ISO-8601 with offset (recommended), or naive local time interpreted in USER_TIMEZONE (or the primary calendar's timezone if unset). Or date-only YYYY-MM-DD to pick the earliest free slot within BUSINESS_HOURS (env). Omit end_iso for default duration or for date-only mode."""
         return calendar_google.create_event(title, start_iso, end_iso)
 
     @mcp.tool()

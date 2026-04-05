@@ -24,7 +24,54 @@ _EVENT_DESCRIPTION_MAX_LEN = 2000
 
 
 def _user_timezone() -> str:
-    return os.environ.get("USER_TIMEZONE", "UTC")
+    """IANA zone from env only (may be empty). Prefer _resolve_calendar_tz(svc) for API calls."""
+    return (os.environ.get("USER_TIMEZONE") or "").strip()
+
+
+# Fetched once per process when USER_TIMEZONE is unset (primary calendar's display timezone).
+_gcal_primary_tz_fetched: bool = False
+_gcal_primary_tz: str | None = None
+
+
+def _fetch_calendar_list_timezone(svc: Any) -> str | None:
+    try:
+        meta = svc.calendarList().get(calendarId=_calendar_id()).execute()
+        tz = (meta.get("timeZone") or "").strip()
+        return tz or None
+    except (HttpError, Exception):
+        return None
+
+
+def _resolve_calendar_tz(svc: Any | None) -> str:
+    """Timezone for interpreting naive ISO times and for Google event start/end payloads.
+
+    Order: USER_TIMEZONE env (if set), else primary calendar's timeZone from Google, else UTC.
+    """
+    global _gcal_primary_tz_fetched, _gcal_primary_tz
+    env = _user_timezone()
+    if env:
+        return env
+    if svc is None:
+        return "UTC"
+    if not _gcal_primary_tz_fetched:
+        _gcal_primary_tz_fetched = True
+        _gcal_primary_tz = _fetch_calendar_list_timezone(svc)
+    return (_gcal_primary_tz or "").strip() or "UTC"
+
+
+def _zoneinfo_or_utc(name: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def _google_event_time_field(dt: datetime, tz_name: str) -> dict[str, str]:
+    """Google recommends local wall time + timeZone when timeZone is set (avoid offset/timeZone mismatch)."""
+    zi = _zoneinfo_or_utc(tz_name)
+    local = dt.astimezone(zi).replace(microsecond=0)
+    wall = local.replace(tzinfo=None).isoformat(timespec="seconds")
+    return {"dateTime": wall, "timeZone": tz_name}
 
 
 def _calendar_id() -> str:
@@ -138,12 +185,13 @@ def _freebusy_busy_merged(
     svc: Any,
     window_start: datetime,
     window_end: datetime,
+    tz_name: str,
 ) -> list[tuple[datetime, datetime]]:
     cid = _calendar_id()
     body: dict[str, Any] = {
         "timeMin": _to_rfc3339(window_start),
         "timeMax": _to_rfc3339(window_end),
-        "timeZone": _user_timezone(),
+        "timeZone": tz_name,
         "items": [{"id": cid}],
     }
     resp = svc.freebusy().query(body=body).execute()
@@ -182,8 +230,9 @@ def _first_gap_in_window(
     window_end: datetime,
     duration_mins: int,
     step_mins: int,
+    tz_name: str,
 ) -> tuple[datetime, datetime] | None:
-    busy = _freebusy_busy_merged(svc, window_start, window_end)
+    busy = _freebusy_busy_merged(svc, window_start, window_end, tz_name)
     dur = timedelta(minutes=duration_mins)
     step = timedelta(minutes=step_mins)
     cursor = window_start
@@ -198,9 +247,10 @@ def _find_next_free_slot(
     svc: Any,
     first_day: date,
     duration_mins: int,
+    tz_name: str,
 ) -> tuple[datetime, datetime] | None:
     """Earliest free slot of duration_mins within business hours, using free/busy on this calendar."""
-    tz = ZoneInfo(_user_timezone())
+    tz = _zoneinfo_or_utc(tz_name)
     now = datetime.now(tz)
     today = now.date()
     start_day = first_day if first_day >= today else today
@@ -219,19 +269,19 @@ def _find_next_free_slot(
             cursor = _ceil_to_minute_step(win_start, step)
         if cursor + timedelta(minutes=duration_mins) > win_end:
             continue
-        slot = _first_gap_in_window(svc, cursor, win_end, duration_mins, step)
+        slot = _first_gap_in_window(svc, cursor, win_end, duration_mins, step, tz_name)
         if slot:
             return slot
     return None
 
 
-def _parse_iso_datetime(s: str) -> datetime:
+def _parse_iso_datetime(s: str, *, default_tz: str = "UTC") -> datetime:
     t = s.strip()
     if t.endswith("Z"):
         t = t[:-1] + "+00:00"
     dt = datetime.fromisoformat(t)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo(_user_timezone()))
+        dt = dt.replace(tzinfo=_zoneinfo_or_utc(default_tz))
     return dt
 
 
@@ -390,7 +440,7 @@ def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
     svc = _calendar_service()
     if svc is None:
         return credentials_missing_response()
-    tz = _user_timezone()
+    tz_name = _resolve_calendar_tz(svc)
     end_raw = (end_iso or "").strip()
 
     d_only = _parse_local_date_only(start_iso)
@@ -407,7 +457,7 @@ def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
                 indent=2,
             )
         duration_mins = _fetch_default_event_length_minutes(svc)
-        slot = _find_next_free_slot(svc, d_only, duration_mins)
+        slot = _find_next_free_slot(svc, d_only, duration_mins, tz_name)
         if slot is None:
             return json.dumps(
                 {
@@ -426,7 +476,7 @@ def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
     else:
         picked_slot = False
         try:
-            start_dt = _parse_iso_datetime(start_iso)
+            start_dt = _parse_iso_datetime(start_iso, default_tz=tz_name)
         except ValueError as e:
             return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
 
@@ -438,14 +488,14 @@ def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
             used_default = True
         else:
             try:
-                end_dt = _parse_iso_datetime(end_raw)
+                end_dt = _parse_iso_datetime(end_raw, default_tz=tz_name)
             except ValueError as e:
                 return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
 
     body: dict[str, Any] = {
         "summary": title,
-        "start": {"dateTime": _to_rfc3339(start_dt), "timeZone": tz},
-        "end": {"dateTime": _to_rfc3339(end_dt), "timeZone": tz},
+        "start": _google_event_time_field(start_dt, tz_name),
+        "end": _google_event_time_field(end_dt, tz_name),
     }
     try:
         created = (
@@ -488,7 +538,7 @@ def update_event(
     if not eid:
         return json.dumps({"error": "missing_event_id"}, indent=2)
 
-    tz = _user_timezone()
+    tz_name = _resolve_calendar_tz(svc)
     try:
         existing = (
             svc.events()
@@ -545,8 +595,8 @@ def update_event(
                 {"error": "invalid_time_range", "detail": "end must be after start."},
                 indent=2,
             )
-        body["start"] = {"dateTime": _to_rfc3339(new_start), "timeZone": tz}
-        body["end"] = {"dateTime": _to_rfc3339(new_end), "timeZone": tz}
+        body["start"] = _google_event_time_field(new_start, tz_name)
+        body["end"] = _google_event_time_field(new_end, tz_name)
 
     if not body:
         return json.dumps(
@@ -589,6 +639,7 @@ def _freebusy_query_calendars(
     tmin: datetime,
     tmax: datetime,
     calendar_ids: list[str],
+    tz_name: str,
 ) -> dict[str, dict[str, Any]]:
     """Free/busy for each calendar id: {busy: merged intervals, errors: optional list}."""
     ids = list(dict.fromkeys(calendar_ids))
@@ -597,7 +648,7 @@ def _freebusy_query_calendars(
     body: dict[str, Any] = {
         "timeMin": _to_rfc3339(tmin),
         "timeMax": _to_rfc3339(tmax),
-        "timeZone": _user_timezone(),
+        "timeZone": tz_name,
         "items": [{"id": x} for x in ids],
     }
     resp = svc.freebusy().query(body=body).execute()
@@ -722,7 +773,9 @@ def invite_to_event(event_id: str, attendee_emails: str) -> str:
             availability_meta["attendee_availability"] = "skipped_not_timed_event"
         else:
             es, ee = bounds
-            fb = _freebusy_query_calendars(svc, es, ee, to_add)
+            fb = _freebusy_query_calendars(
+                svc, es, ee, to_add, _resolve_calendar_tz(svc)
+            )
             busy_conflicts: list[str] = []
             unverified: list[str] = []
             for em in to_add:
@@ -808,9 +861,10 @@ def list_events(start_iso: str, end_iso: str) -> str:
     svc = _calendar_service()
     if svc is None:
         return credentials_missing_response()
+    tz_name = _resolve_calendar_tz(svc)
     try:
-        start_dt = _parse_iso_datetime(start_iso)
-        end_dt = _parse_iso_datetime(end_iso)
+        start_dt = _parse_iso_datetime(start_iso, default_tz=tz_name)
+        end_dt = _parse_iso_datetime(end_iso, default_tz=tz_name)
     except ValueError as e:
         return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
 

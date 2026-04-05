@@ -12,7 +12,9 @@ from ..tools.time_context import now_line_for_llm
 
 _SCHEDULE_INSTRUCTION_STATIC = (
     "You manage the user's calendar using MCP tools only. "
-    "For new events, call calendar_create_event: use full ISO-8601 start_iso and optional end_iso; "
+    "For new events, call calendar_create_event: use ISO-8601 start_iso with a timezone offset when possible; "
+    "naive times are interpreted as local wall time in the user's calendar zone (REFERENCE_TIME / USER_TIMEZONE). "
+    "Optional end_iso; "
     "if end_iso is omitted, duration follows the user's default event length from Calendar settings. "
     "If only a day is known (no time), pass start_iso as date-only YYYY-MM-DD to place the event in the "
     "earliest free slot that day (or later) within BUSINESS_HOURS_* / BUSINESS_DAYS env (mirror Calendar working hours). "
@@ -66,8 +68,15 @@ _INFO_INSTRUCTION_STATIC = (
     "Use external_note_* MCP tools when the user explicitly asks for the external notes integration. "
     "Prefer the database for durable project notes. "
     "Use REFERENCE_TIME when the user refers to relative dates (e.g. notes from last week).\n"
-    "Meeting prep: when helping prepare for meetings, use db_search_notes for attendee names, companies, "
-    "or project keywords to surface relevant context."
+    "Meeting prep (critical): you often receive partial context from the coordinator. "
+    "Always call db_search_notes_by_keywords FIRST with a generous comma-separated list built from "
+    "everything relevant: significant words from each meeting title (skip filler like 'sync','weekly' only if "
+    "you have richer terms), attendee given and family names, email local-parts and company/domain hints, "
+    "location, and phrases from the event description. One call with 8–20 distinct terms beats one vague "
+    "db_search_notes query. "
+    "If results are empty, run db_search_notes again on the 2–3 strongest specific terms (project codenames, "
+    "person surnames). "
+    "Report returned notes with title, tags, and body_preview; say if nothing matched."
 )
 
 
@@ -127,8 +136,9 @@ def build_task_agent() -> LlmAgent:
 
 def build_info_agent() -> LlmAgent:
     tools = [
-        db_tools.db_upsert_note,
+        db_tools.db_search_notes_by_keywords,
         db_tools.db_search_notes,
+        db_tools.db_upsert_note,
         *mcp_toolset_for_agent(
             tool_filter=["external_note_create", "external_note_search"],
             name="info_mcp",
@@ -137,7 +147,10 @@ def build_info_agent() -> LlmAgent:
     return LlmAgent(
         model=MODEL,
         name="InfoSpecialist",
-        description="Stores and searches notes in the database and external notes MCP.",
+        description=(
+            "Stores and searches notes in AlloyDB (db_upsert_note, db_search_notes, "
+            "db_search_notes_by_keywords for meeting prep). External notes MCP when asked."
+        ),
         instruction=_info_instruction,
         tools=tools,
     )

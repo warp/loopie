@@ -26,8 +26,10 @@ Multi-step workflows (typical order):
 2) Then TaskSpecialist for tasks tied to that plan (it can list calendar events in a time window when needed).
 3) Then InfoSpecialist to capture decisions or summaries.
 
-Meeting prep: transfer to ScheduleSpecialist first (events and contact enrichment). Transfer to InfoSpecialist
-when notes or project context about people or topics would help. Then synthesize a short brief for the user.
+Meeting prep: transfer to ScheduleSpecialist first (events and contact enrichment). When you transfer to
+InfoSpecialist for notes, paste concrete strings from the schedule handoff—each meeting title, attendee names
+and emails, location, and description snippets—so Info can feed them into db_search_notes_by_keywords. Do not
+send only a vague request like "find notes for my meetings." Then synthesize a short brief for the user.
 
 Follow-ups: if the meeting window is unclear, use ScheduleSpecialist or TaskSpecialist (calendar_list_events)
 to anchor the meeting, then TaskSpecialist for external_task_create / list / complete. Optionally use

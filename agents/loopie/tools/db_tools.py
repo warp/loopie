@@ -12,6 +12,11 @@ from . import db
 
 DEFAULT_USER_ID = os.environ.get("DEFAULT_USER_ID", "demo-user")
 
+def _ilike_fragment(term: str) -> str:
+    """Build a substring ILIKE pattern; strip SQL wildcards so terms stay literal."""
+    t = term.strip().replace("%", "").replace("_", "")
+    return f"%{t}%" if t else ""
+
 
 async def db_upsert_note(
     title: str,
@@ -66,17 +71,29 @@ async def db_search_notes(
     user_id: str = DEFAULT_USER_ID,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Search notes by title or body (case-insensitive substring)."""
+    """Search notes by title, body, or tag (single phrase, case-insensitive). Prefer db_search_notes_by_keywords for meeting prep."""
     del tool_context
+    q = query.strip()
+    if not q:
+        return {"notes": []}
     pool = await db.get_pool()
     limit = max(1, min(limit, 50))
-    pattern = f"%{query}%"
+    pattern = _ilike_fragment(q)
+    if not pattern or pattern == "%%":
+        return {"notes": []}
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT id::text, title, left(body, 500) AS body_preview, tags, updated_at
             FROM notes
-            WHERE user_id = $1 AND (title ILIKE $2 OR body ILIKE $2)
+            WHERE user_id = $1
+              AND (
+                title ILIKE $2
+                OR body ILIKE $2
+                OR EXISTS (
+                  SELECT 1 FROM unnest(tags) AS tag WHERE tag ILIKE $2
+                )
+              )
             ORDER BY updated_at DESC
             LIMIT $3
             """,
@@ -85,3 +102,66 @@ async def db_search_notes(
             limit,
         )
     return {"notes": [dict(r) for r in rows]}
+
+
+async def db_search_notes_by_keywords(
+    keywords_csv: str,
+    limit: int = 20,
+    user_id: str = DEFAULT_USER_ID,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Search notes where ANY keyword matches title, body, or a tag (meeting prep).
+
+    Pass many comma-separated terms at once: meeting title words, attendee surnames,
+    company or domain fragments, project codes, and topics from the calendar description.
+    Example: "Q2,review,Acme,Sarah,standup,backend".
+    """
+    del tool_context
+    raw = [t.strip() for t in keywords_csv.split(",") if t.strip()]
+    # Drop trivial tokens; cap breadth for the planner and query planner.
+    terms: list[str] = []
+    seen: set[str] = set()
+    for t in raw:
+        key = t.casefold()
+        if len(key) < 2 or key in seen:
+            continue
+        seen.add(key)
+        terms.append(t)
+        if len(terms) >= 24:
+            break
+    if not terms:
+        return {"notes": [], "keywords_used": []}
+    patterns: list[str] = []
+    keywords_used: list[str] = []
+    for t in terms:
+        p = _ilike_fragment(t)
+        if p:
+            patterns.append(p)
+            keywords_used.append(t)
+    if not patterns:
+        return {"notes": [], "keywords_used": []}
+    pool = await db.get_pool()
+    limit = max(1, min(limit, 50))
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id::text, title, left(body, 800) AS body_preview, tags, updated_at
+            FROM notes
+            WHERE user_id = $1
+              AND (
+                title ILIKE ANY($2::text[])
+                OR body ILIKE ANY($2::text[])
+                OR EXISTS (
+                  SELECT 1
+                  FROM unnest(tags) AS tag
+                  WHERE tag ILIKE ANY($2::text[])
+                )
+              )
+            ORDER BY updated_at DESC
+            LIMIT $3
+            """,
+            user_id,
+            patterns,
+            limit,
+        )
+    return {"notes": [dict(r) for r in rows], "keywords_used": keywords_used}
