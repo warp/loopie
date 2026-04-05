@@ -8,8 +8,9 @@ Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (G
 |------|---------|
 | [agents/loopie/](agents/loopie/) | ADK app: `root_agent`, tools, specialists |
 | [mcp_servers/](mcp_servers/) | MCP server (Google Calendar & Tasks; in-memory external notes) over SSE or stdio |
+| [web/](web/) | Browser UI + API (`uvicorn web.app:app`); Docker: [`web/Dockerfile`](web/Dockerfile) |
 | [sql/migrations/](sql/migrations/) | AlloyDB-compatible schema |
-| [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md) | Cloud Run, VPC, secrets, `adk deploy` |
+| [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md) | Cloud Run, VPC, secrets, `adk deploy`, Loopie Web image |
 
 ## Quick start
 
