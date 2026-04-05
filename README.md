@@ -13,12 +13,16 @@ Multi-agent assistant that coordinates **schedule** (MCP calendar), **tasks** (G
 
 ## Quick start
 
+**Python 3.10+** is required (`google-adk` 1.19+ does not publish wheels for older versions). On macOS, prefer an explicit interpreter if `python3` is still 3.9, for example `python3.12 -m venv .venv`.
+
 See [.env.example](.env.example) and [deploy/CLOUD_RUN.md](deploy/CLOUD_RUN.md). For Vertex, set **`ADK_MODEL=gemini-2.5-flash`** and a [supported region](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations) such as **`us-central1`** if you see publisher model 404s.
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3.12 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
+
+Use `python -m pip` (not bare `pip3`) so installs always target the active venv.
 
 Run MCP (terminal A), set `MCP_SSE_URL`, apply `sql/migrations/001_init.sql`, set `DATABASE_URL`, then:
 
@@ -29,7 +33,7 @@ adk web agents
 Deploy only the agent folder:
 
 ```bash
-adk deploy cloud_run agents/loopie --project=... --region=...
+adk deploy cloud_run --project=... --region=... agents/loopie
 ```
 
 ## Scalability and tenancy
@@ -37,6 +41,10 @@ adk deploy cloud_run agents/loopie --project=... --region=...
 The app is **single-tenant** as shipped (one default user id and typically one Google OAuth token for MCP). Extending to many users requires **per-user OAuth tokens** and a **partitioned or otherwise tenant-scoped notes database**. See [deploy/CLOUD_RUN.md §5](deploy/CLOUD_RUN.md#5-scalability-and-tenancy).
 
 ## Troubleshooting
+
+### `No matching distribution found for google-adk>=...` / “Requires-Python >=3.10”
+
+The interpreter that ran `pip` is **older than 3.10**, or `pip3` pointed at **system** Python instead of `.venv` (watch for “Defaulting to user installation”). Recreate the venv with **Python 3.10+** and install with **`python -m pip install -r requirements.txt`** after `source .venv/bin/activate`. Check with `python -V` and `which python`.
 
 ### `ConnectError` / `Failed to create MCP session`
 

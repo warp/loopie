@@ -74,32 +74,34 @@ Note the service URL, then set the agent env var:
 
 ## 3. ADK agent on Cloud Run
 
-From the repo root (with the same `google-adk` version you use locally):
+From the repo root (with the same `google-adk` version you use locally). **Put all `adk deploy cloud_run` flags before the agent directory**; only arguments after `--` are forwarded to `gcloud run deploy`.
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=your-project-id
 export GOOGLE_CLOUD_REGION=us-central1
 export GOOGLE_GENAI_USE_VERTEXAI=True
 
-adk deploy cloud_run agents/loopie \
+adk deploy cloud_run \
   --project=$GOOGLE_CLOUD_PROJECT \
   --region=$GOOGLE_CLOUD_REGION \
   --service_name=loopie-adk \
   --app_name=loopie \
-  --session_service_uri=memory://
+  --session_service_uri=memory:// \
+  agents/loopie
 ```
 
 Pass extra `gcloud run deploy` flags after `--`, for example VPC and secrets:
 
 ```bash
-adk deploy cloud_run agents/loopie \
+adk deploy cloud_run \
   --project=$GOOGLE_CLOUD_PROJECT \
   --region=$GOOGLE_CLOUD_REGION \
   --service_name=loopie-adk \
   --session_service_uri=memory:// \
+  agents/loopie \
   -- \
-  --vpc-connector=projects/$GOOGLE_CLOUD_PROJECT/locations/$GOOGLE_CLOUD_REGION/connectors/YOUR_CONNECTOR \
-  --set-env-vars=GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_REGION=$GOOGLE_CLOUD_REGION,MCP_SSE_URL=https://YOUR-MCP-RUN-URL/sse \
+  --vpc-connector=projects/$GOOGLE_CLOUD_PROJECT/locations/$GOOGLE_CLOUD_REGION/connectors/default \
+  --set-env-vars=GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_REGION=$GOOGLE_CLOUD_REGION,MCP_SSE_URL=https://loopie-mcp-1046774269106.us-central1.run.app/sse \
   --set-secrets=DATABASE_URL=DATABASE_URL:latest
 ```
 
@@ -107,9 +109,11 @@ Adjust secret names and connector path to match your project.
 
 ## 4. Local development
 
+Requires **Python 3.10+** for `google-adk`. Use an explicit binary if needed (e.g. `python3.12`).
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3.12 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
 
 # Terminal A — MCP SSE
 PYTHONPATH=. MCP_PORT=8765 python -m mcp_servers.app sse
