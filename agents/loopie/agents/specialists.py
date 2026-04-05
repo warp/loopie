@@ -12,7 +12,10 @@ from ..tools.time_context import now_line_for_llm
 
 _SCHEDULE_INSTRUCTION_STATIC = (
     "You manage the user's calendar using MCP tools only. "
-    "For new events, call calendar_create_event with ISO-8601 start_iso and end_iso. "
+    "For new events, call calendar_create_event: use full ISO-8601 start_iso and optional end_iso; "
+    "if end_iso is omitted, duration follows the user's default event length from Calendar settings. "
+    "If only a day is known (no time), pass start_iso as date-only YYYY-MM-DD to place the event in the "
+    "earliest free slot that day (or later) within BUSINESS_HOURS_* / BUSINESS_DAYS env (mirror Calendar working hours). "
     "To change an existing event (title, time, location, description), call calendar_update_event with "
     "event_id from calendar_list_events and only the fields to change. "
     "To add guests to an existing event, call calendar_invite_to_event with event_id and comma-separated "

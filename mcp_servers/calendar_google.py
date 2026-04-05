@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import google.auth.credentials
@@ -29,6 +29,200 @@ def _user_timezone() -> str:
 
 def _calendar_id() -> str:
     return os.environ.get("GOOGLE_CALENDAR_ID", "primary")
+
+
+def _env_fallback_duration_minutes() -> int:
+    """When Calendar settings cannot be read, use env or 60 (Google's default for defaultEventLength)."""
+    raw = os.environ.get("DEFAULT_EVENT_DURATION_MINUTES", "60").strip()
+    try:
+        n = int(raw)
+        return max(1, min(n, 24 * 60))
+    except ValueError:
+        return 60
+
+
+def _fetch_default_event_length_minutes(svc: Any) -> int:
+    """User's default event length from Calendar settings (defaultEventLength), else env fallback."""
+    try:
+        r = svc.settings().get(setting="defaultEventLength").execute()
+        val = (r.get("value") or "").strip()
+        if val.isdigit():
+            return max(1, min(int(val), 24 * 60))
+    except HttpError:
+        pass
+    except Exception:
+        pass
+    return _env_fallback_duration_minutes()
+
+
+def _parse_local_date_only(s: str) -> date | None:
+    """If start_iso is strictly YYYY-MM-DD (no time), return that date; else None."""
+    raw = (s or "").strip()
+    if len(raw) != 10 or raw[4] != "-" or raw[7] != "-":
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _business_weekdays_set() -> set[int]:
+    """Weekdays when business hours apply (Python: Monday=0 … Sunday=6). Default Mon–Fri."""
+    raw = os.environ.get("BUSINESS_DAYS", "0,1,2,3,4").strip()
+    out: set[int] = set()
+    for part in raw.split(","):
+        p = part.strip()
+        if p.isdigit():
+            n = int(p)
+            if 0 <= n <= 6:
+                out.add(n)
+    return out if out else {0, 1, 2, 3, 4}
+
+
+def _business_hour_bounds() -> tuple[int, int]:
+    """Start and end hour (0–23) in USER_TIMEZONE; end is exclusive (e.g. 9–17 = 9:00–17:00)."""
+    try:
+        sh = int(os.environ.get("BUSINESS_HOURS_START", "9"))
+        eh = int(os.environ.get("BUSINESS_HOURS_END", "17"))
+    except ValueError:
+        return 9, 17
+    sh = max(0, min(23, sh))
+    eh = max(0, min(24, eh))
+    if eh <= sh:
+        eh = min(24, sh + 8)
+    return sh, eh
+
+
+def _business_window_for_day(day: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
+    sh, eh = _business_hour_bounds()
+    start = datetime.combine(day, time(hour=sh, minute=0), tzinfo=tz)
+    end = datetime.combine(day, time(hour=eh, minute=0), tzinfo=tz)
+    return start, end
+
+
+def _ceil_to_minute_step(dt: datetime, step: int) -> datetime:
+    dt = dt.replace(second=0, microsecond=0)
+    if step <= 1:
+        return dt
+    total = dt.hour * 60 + dt.minute
+    extra = (step - (total % step)) % step
+    if extra == 0:
+        return dt
+    return dt + timedelta(minutes=extra)
+
+
+def _parse_api_dt(s: str) -> datetime:
+    t = (s or "").strip()
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    return datetime.fromisoformat(t)
+
+
+def _merge_busy_intervals(
+    intervals: list[tuple[datetime, datetime]],
+) -> list[tuple[datetime, datetime]]:
+    if not intervals:
+        return []
+    intervals = sorted(intervals, key=lambda x: x[0])
+    merged: list[tuple[datetime, datetime]] = [intervals[0]]
+    for a, b in intervals[1:]:
+        la, lb = merged[-1]
+        if a <= lb:
+            merged[-1] = (la, max(lb, b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def _freebusy_busy_merged(
+    svc: Any,
+    window_start: datetime,
+    window_end: datetime,
+) -> list[tuple[datetime, datetime]]:
+    cid = _calendar_id()
+    body: dict[str, Any] = {
+        "timeMin": _to_rfc3339(window_start),
+        "timeMax": _to_rfc3339(window_end),
+        "timeZone": _user_timezone(),
+        "items": [{"id": cid}],
+    }
+    resp = svc.freebusy().query(body=body).execute()
+    cals = resp.get("calendars") or {}
+    cal = cals.get(cid)
+    if cal is None and cals:
+        cal = next(iter(cals.values()))
+    if not cal:
+        return []
+    raw_busy = cal.get("busy") or []
+    intervals: list[tuple[datetime, datetime]] = []
+    for b in raw_busy:
+        if not isinstance(b, dict):
+            continue
+        try:
+            intervals.append((_parse_api_dt(b["start"]), _parse_api_dt(b["end"])))
+        except (KeyError, ValueError):
+            continue
+    return _merge_busy_intervals(intervals)
+
+
+def _interval_overlaps_busy(
+    a: datetime,
+    b: datetime,
+    busy: list[tuple[datetime, datetime]],
+) -> bool:
+    for bs, be in busy:
+        if a < be and b > bs:
+            return True
+    return False
+
+
+def _first_gap_in_window(
+    svc: Any,
+    window_start: datetime,
+    window_end: datetime,
+    duration_mins: int,
+    step_mins: int,
+) -> tuple[datetime, datetime] | None:
+    busy = _freebusy_busy_merged(svc, window_start, window_end)
+    dur = timedelta(minutes=duration_mins)
+    step = timedelta(minutes=step_mins)
+    cursor = window_start
+    while cursor + dur <= window_end:
+        if not _interval_overlaps_busy(cursor, cursor + dur, busy):
+            return cursor, cursor + dur
+        cursor += step
+    return None
+
+
+def _find_next_free_slot(
+    svc: Any,
+    first_day: date,
+    duration_mins: int,
+) -> tuple[datetime, datetime] | None:
+    """Earliest free slot of duration_mins within business hours, using free/busy on this calendar."""
+    tz = ZoneInfo(_user_timezone())
+    now = datetime.now(tz)
+    today = now.date()
+    start_day = first_day if first_day >= today else today
+    max_days = max(1, min(int(os.environ.get("SLOT_SEARCH_MAX_DAYS", "14")), 60))
+    step = max(5, min(int(os.environ.get("SLOT_SEARCH_STEP_MINUTES", "15")), 60))
+    wd = _business_weekdays_set()
+
+    for offset in range(max_days):
+        day = start_day + timedelta(days=offset)
+        if day.weekday() not in wd:
+            continue
+        win_start, win_end = _business_window_for_day(day, tz)
+        if day == now.date() and now > win_start:
+            cursor = _ceil_to_minute_step(max(now, win_start), step)
+        else:
+            cursor = _ceil_to_minute_step(win_start, step)
+        if cursor + timedelta(minutes=duration_mins) > win_end:
+            continue
+        slot = _first_gap_in_window(svc, cursor, win_end, duration_mins, step)
+        if slot:
+            return slot
+    return None
 
 
 def _parse_iso_datetime(s: str) -> datetime:
@@ -184,17 +378,69 @@ def _normalize_event(ev: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def create_event(title: str, start_iso: str, end_iso: str) -> str:
-    """Create a calendar event; return JSON in the same normalized shape as list_events (+ html_link)."""
+def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
+    """Create a calendar event; return JSON in the same normalized shape as list_events (+ html_link).
+
+    - If start_iso is **date-only** ``YYYY-MM-DD`` (no time): pick the earliest free slot of the
+      default event length within BUSINESS_HOURS / BUSINESS_DAYS (see env) using free/busy.
+      Omit end_iso in this mode.
+    - Otherwise: timed start. If end_iso is omitted or empty, end = start + default event length
+      (Calendar setting defaultEventLength or DEFAULT_EVENT_DURATION_MINUTES).
+    """
     svc = _calendar_service()
     if svc is None:
         return credentials_missing_response()
     tz = _user_timezone()
-    try:
-        start_dt = _parse_iso_datetime(start_iso)
-        end_dt = _parse_iso_datetime(end_iso)
-    except ValueError as e:
-        return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
+    end_raw = (end_iso or "").strip()
+
+    d_only = _parse_local_date_only(start_iso)
+    if d_only is not None:
+        if end_raw:
+            return json.dumps(
+                {
+                    "error": "invalid_create_event_args",
+                    "detail": (
+                        "When start_iso is date-only (YYYY-MM-DD), omit end_iso; "
+                        "a free slot is chosen using default duration."
+                    ),
+                },
+                indent=2,
+            )
+        duration_mins = _fetch_default_event_length_minutes(svc)
+        slot = _find_next_free_slot(svc, d_only, duration_mins)
+        if slot is None:
+            return json.dumps(
+                {
+                    "error": "no_free_slot",
+                    "detail": (
+                        f"No contiguous free slot of {duration_mins} minutes found within business hours "
+                        f"(BUSINESS_HOURS_START/END, BUSINESS_DAYS) in the next SLOT_SEARCH_MAX_DAYS days."
+                    ),
+                },
+                indent=2,
+            )
+        start_dt, end_dt = slot
+        used_default = True
+        default_mins = duration_mins
+        picked_slot = True
+    else:
+        picked_slot = False
+        try:
+            start_dt = _parse_iso_datetime(start_iso)
+        except ValueError as e:
+            return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
+
+        used_default = False
+        default_mins: int | None = None
+        if not end_raw:
+            default_mins = _fetch_default_event_length_minutes(svc)
+            end_dt = start_dt + timedelta(minutes=default_mins)
+            used_default = True
+        else:
+            try:
+                end_dt = _parse_iso_datetime(end_raw)
+            except ValueError as e:
+                return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
 
     body: dict[str, Any] = {
         "summary": title,
@@ -215,6 +461,10 @@ def create_event(title: str, start_iso: str, end_iso: str) -> str:
         )
     out = _normalize_event(created)
     out["created_at"] = created.get("created")
+    if used_default and default_mins is not None:
+        out["default_duration_minutes"] = default_mins
+    if picked_slot:
+        out["free_slot_selected"] = True
     return json.dumps(out, indent=2)
 
 
