@@ -53,9 +53,14 @@ def build_server() -> FastMCP:
         return PlainTextResponse("ok")
 
     @mcp.tool()
-    def calendar_create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
-        """Create a Google Calendar event. start_iso is ISO-8601 with offset (recommended), or naive local time interpreted in USER_TIMEZONE (or the primary calendar's timezone if unset). Or date-only YYYY-MM-DD to pick the earliest free slot within BUSINESS_HOURS (env). Omit end_iso for default duration or for date-only mode."""
-        return calendar_google.create_event(title, start_iso, end_iso)
+    def calendar_create_event(
+        title: str,
+        start_iso: str,
+        end_iso: str | None = None,
+        recurrence_rules: str | None = None,
+    ) -> str:
+        """Create a Google Calendar event. start_iso is ISO-8601 with offset (recommended), or naive local time interpreted in USER_TIMEZONE (or the primary calendar's timezone if unset). Or date-only YYYY-MM-DD to pick the earliest free slot within BUSINESS_HOURS (env). Omit end_iso for default duration or for date-only mode. Optional recurrence_rules: newline-separated RFC 5545 lines (RRULE:/EXDATE:/RDATE:), or RRULE bodies only (e.g. FREQ=WEEKLY;BYDAY=MO)."""
+        return calendar_google.create_event(title, start_iso, end_iso, recurrence_rules)
 
     @mcp.tool()
     def calendar_list_events(start_iso: str, end_iso: str) -> str:
@@ -70,8 +75,10 @@ def build_server() -> FastMCP:
         end_iso: str | None = None,
         location: str | None = None,
         description: str | None = None,
+        recurrence_rules: str | None = None,
+        recurrence_clear: bool = False,
     ) -> str:
-        """Update an existing calendar event by event_id (from calendar_list_events). Omit optional fields to leave them unchanged. start_iso/end_iso are ISO-8601; timed events only."""
+        """Update an existing calendar event by event_id (from calendar_list_events). Omit optional fields to leave them unchanged. start_iso/end_iso are ISO-8601; timed events only. recurrence_rules: same format as calendar_create_event. recurrence_clear=True removes recurrence (do not pass recurrence_rules with content)."""
         return calendar_google.update_event(
             event_id,
             title=title,
@@ -79,6 +86,8 @@ def build_server() -> FastMCP:
             end_iso=end_iso,
             location=location,
             description=description,
+            recurrence_rules=recurrence_rules,
+            recurrence_clear=recurrence_clear,
         )
 
     @mcp.tool()

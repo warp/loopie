@@ -394,6 +394,47 @@ def _normalize_attendees(ev: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _parse_recurrence_rules(raw: str | None) -> tuple[list[str] | None, str | None]:
+    """Parse user/LLM recurrence input into Google Calendar ``recurrence`` list entries.
+
+    One RFC 5545 line per newline. Lines may be full ``RRULE:...``, ``EXDATE:...``, or ``RDATE:...``;
+    otherwise a line is treated as an RRULE body and prefixed with ``RRULE:``.
+
+    Returns ``(lines, None)`` on success; ``(None, error_detail)`` on invalid input.
+    """
+    if raw is None:
+        return None, None
+    text = raw.strip()
+    if not text:
+        return None, "recurrence_rules is empty; omit the parameter or provide at least one rule line."
+    lines: list[str] = []
+    for line in text.replace("\r\n", "\n").split("\n"):
+        part = line.strip()
+        if not part:
+            continue
+        up = part.upper()
+        if up.startswith("RRULE:"):
+            suffix = part[6:].strip()
+            if not suffix:
+                return None, "Empty RRULE body after 'RRULE:'."
+            lines.append("RRULE:" + suffix)
+        elif up.startswith("EXDATE:"):
+            suffix = part[7:].strip()
+            if not suffix:
+                return None, "Empty EXDATE value after 'EXDATE:'."
+            lines.append("EXDATE:" + suffix)
+        elif up.startswith("RDATE:"):
+            suffix = part[6:].strip()
+            if not suffix:
+                return None, "Empty RDATE value after 'RDATE:'."
+            lines.append("RDATE:" + suffix)
+        else:
+            lines.append("RRULE:" + part)
+    if not lines:
+        return None, "No non-empty recurrence lines after parsing."
+    return lines, None
+
+
 def _normalize_event(ev: dict[str, Any]) -> dict[str, Any]:
     start = ev.get("start") or {}
     end = ev.get("end") or {}
@@ -425,10 +466,19 @@ def _normalize_event(ev: dict[str, Any]) -> dict[str, Any]:
     if hang:
         out["hangout_link"] = hang
 
+    rec = ev.get("recurrence")
+    if isinstance(rec, list) and rec:
+        out["recurrence"] = [str(x) for x in rec if isinstance(x, str) and x.strip()]
+
     return out
 
 
-def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
+def create_event(
+    title: str,
+    start_iso: str,
+    end_iso: str | None = None,
+    recurrence_rules: str | None = None,
+) -> str:
     """Create a calendar event; return JSON in the same normalized shape as list_events (+ html_link).
 
     - If start_iso is **date-only** ``YYYY-MM-DD`` (no time): pick the earliest free slot of the
@@ -436,6 +486,9 @@ def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
       Omit end_iso in this mode.
     - Otherwise: timed start. If end_iso is omitted or empty, end = start + default event length
       (Calendar setting defaultEventLength or DEFAULT_EVENT_DURATION_MINUTES).
+
+    Optional ``recurrence_rules``: newline-separated RFC 5545 lines (``RRULE:...``, ``EXDATE:...``,
+    ``RDATE:...``), or rule bodies without the ``RRULE:`` prefix (e.g. ``FREQ=WEEKLY;BYDAY=MO``).
     """
     svc = _calendar_service()
     if svc is None:
@@ -492,11 +545,17 @@ def create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:
             except ValueError as e:
                 return json.dumps({"error": "invalid_iso_datetime", "detail": str(e)}, indent=2)
 
+    rec_lines, rec_err = _parse_recurrence_rules(recurrence_rules)
+    if rec_err:
+        return json.dumps({"error": "invalid_recurrence_rules", "detail": rec_err}, indent=2)
+
     body: dict[str, Any] = {
         "summary": title,
         "start": _google_event_time_field(start_dt, tz_name),
         "end": _google_event_time_field(end_dt, tz_name),
     }
+    if rec_lines:
+        body["recurrence"] = rec_lines
     try:
         created = (
             svc.events()
@@ -525,11 +584,16 @@ def update_event(
     end_iso: str | None = None,
     location: str | None = None,
     description: str | None = None,
+    recurrence_rules: str | None = None,
+    recurrence_clear: bool = False,
 ) -> str:
     """Patch an existing calendar event by id. Omit optional fields to leave them unchanged.
 
     When moving time: pass both start_iso and end_iso, or pass only start_iso to preserve duration,
     or only end_iso to change end while keeping start. Timed events only (not all-day date-only).
+
+    Recurrence: pass ``recurrence_rules`` with the same newline-separated format as ``create_event``,
+    or set ``recurrence_clear=True`` to remove recurrence from the event. Do not pass both.
     """
     svc = _calendar_service()
     if svc is None:
@@ -562,6 +626,31 @@ def update_event(
             },
             indent=2,
         )
+
+    if recurrence_clear and recurrence_rules is not None and recurrence_rules.strip():
+        return json.dumps(
+            {
+                "error": "conflicting_recurrence_args",
+                "detail": "Use either recurrence_clear or recurrence_rules, not both.",
+            },
+            indent=2,
+        )
+
+    if recurrence_rules is not None and not recurrence_rules.strip() and not recurrence_clear:
+        return json.dumps(
+            {
+                "error": "empty_recurrence_rules",
+                "detail": (
+                    "recurrence_rules was empty. Omit it to leave recurrence unchanged, "
+                    "or set recurrence_clear=True to remove recurrence."
+                ),
+            },
+            indent=2,
+        )
+
+    rec_lines, rec_err = _parse_recurrence_rules(recurrence_rules)
+    if rec_err:
+        return json.dumps({"error": "invalid_recurrence_rules", "detail": rec_err}, indent=2)
 
     body: dict[str, Any] = {}
     if title is not None:
@@ -598,9 +687,20 @@ def update_event(
         body["start"] = _google_event_time_field(new_start, tz_name)
         body["end"] = _google_event_time_field(new_end, tz_name)
 
+    if recurrence_clear:
+        body["recurrence"] = []
+    elif rec_lines:
+        body["recurrence"] = rec_lines
+
     if not body:
         return json.dumps(
-            {"error": "no_updates", "detail": "Pass at least one of title, start_iso, end_iso, location, description."},
+            {
+                "error": "no_updates",
+                "detail": (
+                    "Pass at least one of title, start_iso, end_iso, location, description, "
+                    "recurrence_rules, or recurrence_clear."
+                ),
+            },
             indent=2,
         )
 
