@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 from mcp_servers import calendar_google
 from mcp_servers import people_google
@@ -45,6 +47,10 @@ def build_server() -> FastMCP:
         host=host,
         port=port,
     )
+
+    @mcp.custom_route("/health", methods=["GET"])
+    async def _health(_request: Request) -> PlainTextResponse:
+        return PlainTextResponse("ok")
 
     @mcp.tool()
     def calendar_create_event(title: str, start_iso: str, end_iso: str | None = None) -> str:

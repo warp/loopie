@@ -9,6 +9,7 @@ This project has two runnable services:
 
 - `gcloud` CLI authenticated; APIs enabled: Cloud Run, Vertex AI API, Secret Manager (if using secrets), AlloyDB or Cloud SQL as needed.
 - Cloud Run service account (default compute SA) granted **Vertex AI User** (`roles/aiplatform.user`).
+- When using `--set-secrets`, that same service account needs **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`) on each secret (or at project level). Without it, deploy fails with “Permission denied on secret” for `…-compute@developer.gserviceaccount.com`.
 
 ## 1. AlloyDB connectivity
 
@@ -31,17 +32,35 @@ Enable the [Google Calendar API](https://console.cloud.google.com/apis/library/c
 
 Optional: `USER_TIMEZONE` (e.g. `America/Los_Angeles`) for naive ISO times from tools.
 
-Build from the repository root:
+Build from the repository root. Before the first `docker push`, configure Docker to use your gcloud credentials (otherwise push fails with “Unauthenticated request” / `uploadArtifacts` denied):
 
 ```bash
-docker build -f mcp_servers/Dockerfile -t gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp .
+gcloud auth configure-docker
+```
+
+On Apple Silicon (or any non-amd64 host), build for Cloud Run’s default execution environment:
+
+```bash
+docker build --platform linux/amd64 -f mcp_servers/Dockerfile -t gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp .
 docker push gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp
 gcloud run deploy loopie-mcp \
   --image gcr.io/$GOOGLE_CLOUD_PROJECT/loopie-mcp \
   --region $GOOGLE_CLOUD_REGION \
   --allow-unauthenticated \
-  --set-secrets=GOOGLE_OAUTH_TOKEN_JSON=YOUR_TOKEN_SECRET:latest
+  --set-secrets=GOOGLE_OAUTH_TOKEN_JSON=GOOGLE_OAUTH_TOKEN_JSON:latest
 ```
+
+Grant the default Cloud Run runtime account access to the secret once (replace the secret id if you use a different name):
+
+```bash
+PROJECT_NUMBER=$(gcloud projects describe "$GOOGLE_CLOUD_PROJECT" --format='value(projectNumber)')
+gcloud secrets add-iam-policy-binding GOOGLE_OAUTH_TOKEN_JSON \
+  --project="$GOOGLE_CLOUD_PROJECT" \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+If the service uses `--service-account`, bind that account instead of the compute default.
 
 Adjust secrets to match your auth choice (for example `GOOGLE_SERVICE_ACCOUNT_JSON` instead). If no credentials are set, Calendar and Tasks tools return a JSON error explaining required env vars.
 
@@ -50,6 +69,8 @@ Note the service URL, then set the agent env var:
 `MCP_SSE_URL=https://<mcp-service-url>/sse`
 
 (Use the exact `/sse` path your server exposes; FastMCP defaults apply.)
+
+**If deploy fails with “failed to start and listen on PORT=8080”:** open the revision **Logs** link from the error. Common causes: image built for the wrong CPU (`arm64` locally vs `linux/amd64` on Cloud Run — use `--platform linux/amd64` as above), or `MCP_PORT` set on the service so the process listens on a different port than Cloud Run’s `PORT`. The server exposes `GET /health` for optional HTTP health checks.
 
 ## 3. ADK agent on Cloud Run
 
