@@ -135,18 +135,31 @@ async def api_chat(req: ChatRequest) -> ChatResponse:
                     final_text = event.error_message or "Agent escalated."
                 break
     except ConnectionError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "mcp_unreachable",
-                "message": str(e),
-                "hint": (
-                    "Nothing is listening at MCP_SSE_URL (connection refused). "
-                    "Start MCP in another terminal: PYTHONPATH=. python -m mcp_servers.app sse — "
-                    "or use in-process MCP: MCP_USE_STDIO=1 (and PYTHONPATH=. so mcp_servers imports work)."
-                ),
-            },
-        ) from e
+        sse = os.environ.get("MCP_SSE_URL", "").strip()
+        raw = str(e).strip()
+        # ADK often raises ConnectionError with an empty suffix after "Failed to create MCP session:".
+        if not raw or raw.rstrip(":").strip() == "Failed to create MCP session":
+            msg = (
+                f"Could not open an MCP session to {sse!r} (nothing listening or connection failed)."
+                if sse
+                else "Could not open an MCP session (SSE unreachable)."
+            )
+        else:
+            msg = raw
+        detail: dict[str, Any] = {
+            "error": "mcp_unreachable",
+            "message": msg,
+            "hint": (
+                "Nothing is listening at MCP_SSE_URL (connection refused). "
+                "From the repo root, start MCP: PYTHONPATH=. python -m mcp_servers.app sse "
+                "(default port 8765; keep .env MCP_SSE_URL in sync, e.g. http://127.0.0.1:8765/sse). "
+                "Or use in-process MCP: MCP_USE_STDIO=1 (and PYTHONPATH=. so mcp_servers imports work). "
+                "To run without calendar/MCP tools until the server is up: unset MCP_SSE_URL or set MCP_DISABLED=1."
+            ),
+        }
+        if sse:
+            detail["mcp_sse_url"] = sse
+        raise HTTPException(status_code=503, detail=detail) from e
 
     return ChatResponse(session_id=req.session_id, user_id=req.user_id, response=final_text)
 
