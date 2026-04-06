@@ -5,6 +5,11 @@ const dropdownEl = document.getElementById("mentionDropdown");
 
 const SESSION_ID = crypto.randomUUID();
 
+/** True while /api/chat is in flight (Enter bypasses disabled send button). */
+let chatInFlight = false;
+let thinkingRowEl = null;
+const SEND_LABEL_DEFAULT = "Send";
+
 let mentionState = {
   open: false,
   items: [],
@@ -63,6 +68,48 @@ function addMessage(role, text) {
   msg.appendChild(body);
   messagesEl.appendChild(msg);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function showThinkingRow() {
+  removeThinkingRow();
+  const msg = document.createElement("div");
+  msg.className = "msg msgThinking";
+  msg.setAttribute("role", "status");
+  msg.setAttribute("aria-live", "polite");
+  msg.setAttribute("aria-label", "Agent is working on a response");
+
+  const r = document.createElement("div");
+  r.className = "role";
+  r.textContent = "agent";
+
+  const body = document.createElement("div");
+  body.className = "thinkingWrap";
+  const label = document.createElement("span");
+  label.className = "thinkingLabel";
+  label.textContent = "Working on it";
+  const dots = document.createElement("span");
+  dots.className = "thinkingDots";
+  dots.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i += 1) {
+    const d = document.createElement("span");
+    d.className = "thinkingDot";
+    dots.appendChild(d);
+  }
+  body.appendChild(label);
+  body.appendChild(dots);
+
+  msg.appendChild(r);
+  msg.appendChild(body);
+  messagesEl.appendChild(msg);
+  thinkingRowEl = msg;
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeThinkingRow() {
+  if (thinkingRowEl && thinkingRowEl.parentNode) {
+    thinkingRowEl.parentNode.removeChild(thinkingRowEl);
+  }
+  thinkingRowEl = null;
 }
 
 function getActiveMention(text, caretIdx) {
@@ -272,12 +319,16 @@ inputEl.addEventListener("keydown", (e) => {
 
 async function sendMessage() {
   const text = inputEl.value.trim();
-  if (!text) return;
+  if (!text || chatInFlight) return;
   hideDropdown();
 
+  chatInFlight = true;
   inputEl.value = "";
+  inputEl.disabled = true;
   sendBtn.disabled = true;
+  sendBtn.textContent = "Working…";
   addMessage("you", text);
+  showThinkingRow();
 
   try {
     const res = await fetch("/api/chat", {
@@ -286,6 +337,7 @@ async function sendMessage() {
       body: JSON.stringify({ message: text, session_id: SESSION_ID }),
     });
     const data = await res.json();
+    removeThinkingRow();
     if (!res.ok) {
       const detail = data.detail;
       const msg =
@@ -299,9 +351,17 @@ async function sendMessage() {
       addMessage("agent", data.response || "");
     }
   } catch (e) {
-    addMessage("agent", `Network error: ${String(e)}`);
+    removeThinkingRow();
+    const fallback =
+      e instanceof SyntaxError
+        ? "Error: Could not parse the server response."
+        : `Network error: ${String(e)}`;
+    addMessage("agent", fallback);
   } finally {
+    chatInFlight = false;
+    inputEl.disabled = false;
     sendBtn.disabled = false;
+    sendBtn.textContent = SEND_LABEL_DEFAULT;
     inputEl.focus();
   }
 }
