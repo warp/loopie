@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 import google.auth.credentials
@@ -16,6 +18,47 @@ from googleapiclient.errors import HttpError
 from mcp_servers import google_auth_env as gae
 
 TASKS_SCOPES = ("https://www.googleapis.com/auth/tasks",)
+
+_DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _normalize_due_for_google_tasks(due_raw: str) -> str:
+    """Tasks API expects RFC3339 with timezone; LLMs often send date-only or naive datetimes."""
+    s = due_raw.strip()
+    if not s:
+        return s
+    if _DATE_ONLY.fullmatch(s):
+        return f"{s}T00:00:00.000Z"
+    s2 = s.replace(" ", "T", 1) if (" " in s and "T" not in s) else s
+    try:
+        if s2.endswith("Z"):
+            dt = datetime.fromisoformat(s2[:-1] + "+00:00")
+        else:
+            dt = datetime.fromisoformat(s2)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return s
+    u = dt.astimezone(timezone.utc).replace(microsecond=0)
+    return u.strftime("%Y-%m-%dT%H:%M:%S") + ".000Z"
+
+
+def _http_error_payload(e: HttpError) -> dict[str, Any]:
+    out: dict[str, Any] = {"reason": str(e)}
+    raw = getattr(e, "content", None) or b""
+    if not isinstance(raw, bytes):
+        return out
+    try:
+        data = json.loads(raw.decode())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return out
+    err = data.get("error")
+    if isinstance(err, dict):
+        if err.get("message"):
+            out["message"] = err["message"]
+        if err.get("errors"):
+            out["errors"] = err["errors"]
+    return out
 
 
 def _load_credentials() -> google.auth.credentials.Credentials | None:
@@ -116,18 +159,33 @@ def create_task(title: str, due_iso: str | None = None) -> str:
     except RuntimeError as e:
         return str(e.args[0])
 
+    due_norm: str | None = None
+    if due_iso and due_iso.strip():
+        due_norm = _normalize_due_for_google_tasks(due_iso)
+
     body: dict[str, Any] = {"title": title}
-    if due_iso:
-        body["due"] = due_iso.strip()
+    if due_norm:
+        body["due"] = due_norm
+
+    def _insert(task_body: dict[str, Any]) -> dict[str, Any]:
+        return svc.tasks().insert(tasklist=tl, body=task_body).execute()
 
     try:
-        created = svc.tasks().insert(tasklist=tl, body=body).execute()
+        created = _insert(body)
     except HttpError as e:
         status = int(e.resp.status) if e.resp else None
-        return json.dumps(
-            {"error": "google_tasks_api", "status": status, "reason": str(e)},
-            indent=2,
-        )
+        detail = _http_error_payload(e)
+        # Common failure: malformed due (e.g. date-only) — retry once without due so work isn't lost.
+        if due_norm and status == 400:
+            try:
+                created = _insert({"title": title})
+                out = _normalize_task(created)
+                out["due_omitted_after_api_error"] = True
+                out["tasks_api_error"] = detail
+                return json.dumps(out, indent=2)
+            except HttpError:
+                pass
+        return json.dumps({"error": "google_tasks_api", "status": status, **detail}, indent=2)
     return json.dumps(_normalize_task(created), indent=2)
 
 
@@ -145,7 +203,7 @@ def list_tasks() -> str:
     except HttpError as e:
         status = int(e.resp.status) if e.resp else None
         return json.dumps(
-            {"error": "google_tasks_api", "status": status, "reason": str(e)},
+            {"error": "google_tasks_api", "status": status, **_http_error_payload(e)},
             indent=2,
         )
 
@@ -172,7 +230,7 @@ def complete_task(task_id: str) -> str:
     except HttpError as e:
         status = int(e.resp.status) if e.resp else None
         return json.dumps(
-            {"error": "google_tasks_api", "status": status, "reason": str(e)},
+            {"error": "google_tasks_api", "status": status, **_http_error_payload(e)},
             indent=2,
         )
     return json.dumps(_normalize_task(updated), indent=2)

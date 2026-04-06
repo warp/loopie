@@ -97,7 +97,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def external_task_create(title: str, due_iso: str | None = None) -> str:
-        """Create a task in Google Tasks. due_iso is optional RFC3339."""
+        """Create a task in Google Tasks. due_iso optional: RFC3339 (Z or offset), or date-only YYYY-MM-DD (normalized to UTC midnight)."""
         return tasks_google.create_task(title, due_iso)
 
     @mcp.tool()

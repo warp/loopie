@@ -51,7 +51,7 @@ def _schedule_instruction(_ctx: ReadonlyContext) -> str:
 
 _TASK_INSTRUCTION_STATIC = (
     "You manage Google Tasks and read-only calendar access via MCP. "
-    "For tasks: use external_task_create (optional RFC3339 due_iso), external_task_list, "
+    "For tasks: use external_task_create (optional due_iso: RFC3339 with Z/offset, or YYYY-MM-DD), external_task_list, "
     "external_task_complete (task_id from create/list). "
     "To see what's on the calendar when planning tasks or checking conflicts, call calendar_list_events "
     "with ISO-8601 start_iso and end_iso for the window you need. "
