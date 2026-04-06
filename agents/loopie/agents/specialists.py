@@ -36,7 +36,11 @@ _SCHEDULE_INSTRUCTION_STATIC = (
     "Summarize time, title, location/link, attendees, and contact highlights. If an event has no attendees, "
     "prep from title, location, and description and note that no guest list was on the event.\n"
     "Every calendar_list_events item includes event_id. Include each relevant event_id in your handoff to "
-    "the coordinator so notes can be linked and retrieved for that meeting."
+    "the coordinator so notes can be linked and retrieved for that meeting.\n"
+    "At the end of every substantive reply, add a short block exactly like:\n"
+    "Coordinator handoff (schedule):\n"
+    "- …bullets with concrete outcomes (event title, start/end or slot, event_id, invitee errors, etc.).\n"
+    "The coordinator merges several specialists; this block must be scannable so nothing from this step is lost."
 )
 
 
@@ -58,7 +62,10 @@ _TASK_INSTRUCTION_STATIC = (
     "calendar_list_events if you need to anchor which meeting (time/title). Create tasks with clear titles "
     "(include meeting title or person name when helpful) and due_iso in RFC3339; default due dates to the "
     "next business day unless the user specifies otherwise. Use external_contact_search when a person "
-    "reference is ambiguous; cite display_name and email from results, not resource IDs."
+    "reference is ambiguous; cite display_name and email from results, not resource IDs.\n"
+    "At the end of every substantive reply, add:\n"
+    "Coordinator handoff (tasks):\n"
+    "- …bullets (task titles created, task_ids, dues, list highlights, or explicit \"no task changes\")."
 )
 
 
@@ -79,6 +86,9 @@ _INFO_INSTRUCTION_STATIC = (
     "titles, names, companies, project codes, tags, and request keywords. (3) If thin, db_search_notes on "
     "2–4 strong phrases. (4) Then db_upsert_note or finalize, merging findings into the answer—do not hide "
     "useful notes in tool output only; repeat the gist for the user.\n"
+    "At the end of every substantive reply, add:\n"
+    "Coordinator handoff (notes):\n"
+    "- …bullets (note titles/ids written, tags, calendar_event_id linked, search hits count, or \"no DB writes\").\n"
     "Exception: skip searches only for pure external_note_* with no AlloyDB angle, or a trivial ack."
 )
 
