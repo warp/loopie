@@ -58,9 +58,18 @@ def build_server() -> FastMCP:
         start_iso: str,
         end_iso: str | None = None,
         recurrence_rules: str | None = None,
+        create_meet: bool = False,
+        enable_transcript: bool = True,
     ) -> str:
-        """Create a Google Calendar event. start_iso is ISO-8601 with offset (recommended), or naive local time interpreted in USER_TIMEZONE (or the primary calendar's timezone if unset). Or date-only YYYY-MM-DD to pick the earliest free slot within BUSINESS_HOURS (env). Omit end_iso for default duration or for date-only mode. Optional recurrence_rules: newline-separated RFC 5545 lines (RRULE:/EXDATE:/RDATE:), or RRULE bodies only (e.g. FREQ=WEEKLY;BYDAY=MO)."""
-        return calendar_google.create_event(title, start_iso, end_iso, recurrence_rules)
+        """Create a Google Calendar event. start_iso is ISO-8601 with offset (recommended), or naive local time interpreted in USER_TIMEZONE (or the primary calendar's timezone if unset). Or date-only YYYY-MM-DD to pick the earliest free slot within BUSINESS_HOURS (env). Omit end_iso for default duration or for date-only mode. Optional recurrence_rules: newline-separated RFC 5545 lines (RRULE:/EXDATE:/RDATE:), or RRULE bodies only (e.g. FREQ=WEEKLY;BYDAY=MO). For meeting events, set create_meet=True to attach a Google Meet link; enable_transcript=True attempts to turn on automatic Meet transcripts."""
+        return calendar_google.create_event(
+            title,
+            start_iso,
+            end_iso,
+            recurrence_rules,
+            create_meet=create_meet,
+            enable_transcript=enable_transcript,
+        )
 
     @mcp.tool()
     def calendar_list_events(start_iso: str, end_iso: str) -> str:
@@ -94,6 +103,11 @@ def build_server() -> FastMCP:
     def calendar_invite_to_event(event_id: str, attendee_emails: str) -> str:
         """Add invitees to an existing event. event_id from calendar_list_events. attendee_emails: comma-separated. Optionally checks each new invitee's free/busy (when their calendar is visible) so the event time does not overlap their busy time; see INVITE_* env vars."""
         return calendar_google.invite_to_event(event_id, attendee_emails)
+
+    @mcp.tool()
+    def meeting_transcript_read(event_id: str) -> str:
+        """Read generated Google Meet transcript entries for a Calendar event_id. Returns transcript_not_ready when the Meet transcript has not been generated or is not visible yet."""
+        return calendar_google.read_meeting_transcript(event_id)
 
     @mcp.tool()
     def external_task_create(title: str, due_iso: str | None = None) -> str:

@@ -16,6 +16,9 @@ _SCHEDULE_INSTRUCTION_STATIC = (
     "naive times are interpreted as local wall time in the user's calendar zone (REFERENCE_TIME / USER_TIMEZONE). "
     "Optional end_iso; "
     "if end_iso is omitted, duration follows the user's default event length from Calendar settings. "
+    "For meeting-like events (syncs, calls, interviews, reviews, anything with attendees, or when the user says "
+    "meeting/hangout/Meet), pass create_meet=True and enable_transcript=True unless the user explicitly declines "
+    "video or transcripts. Report the hangout_link/meeting_code and transcript_enablement status if present. "
     "If only a day is known (no time), pass start_iso as date-only YYYY-MM-DD to place the event in the "
     "earliest free slot that day (or later) within BUSINESS_HOURS_* / BUSINESS_DAYS env (mirror Calendar working hours). "
     "For recurring events, pass recurrence_rules: one RFC 5545 line per newline—full RRULE:/EXDATE:/RDATE: lines, "
@@ -58,10 +61,13 @@ _TASK_INSTRUCTION_STATIC = (
     "Always use REFERENCE_TIME when interpreting relative dates. "
     "Return concise summaries of what changed.\n"
     "Follow-ups: when the user wants next steps after a meeting or to capture action items, use "
-    "calendar_list_events if you need to anchor which meeting (time/title). Create tasks with clear titles "
-    "(include meeting title or person name when helpful) and due_iso in RFC3339; default due dates to the "
-    "next business day unless the user specifies otherwise. Use external_contact_search when a person "
-    "reference is ambiguous; cite display_name and email from results, not resource IDs.\n"
+    "calendar_list_events if you need to anchor which meeting (time/title). If the event has a Google Meet "
+    "link or was scheduled by Loopie as a meeting, call meeting_transcript_read with its event_id before "
+    "creating tasks. Extract explicit commitments/action items from the transcript; do not invent tasks if "
+    "the transcript is unavailable or not ready—say that clearly and ask for pasted notes if needed. Create "
+    "tasks with clear titles (include meeting title and owner/person name when helpful) and due_iso in RFC3339; "
+    "default due dates to the next business day unless the user specifies otherwise. Use external_contact_search "
+    "when a person reference is ambiguous; cite display_name and email from results, not resource IDs.\n"
     "End every substantive reply with concise bullets of concrete outcomes: task titles created, task_ids, "
     "dues, list highlights, or explicit \"no task changes\". This reply is stored in coordinator context, "
     "so make it scannable and self-contained."
@@ -131,6 +137,7 @@ def build_task_agent() -> LlmAgent:
                 "external_task_list",
                 "external_task_complete",
                 "calendar_list_events",
+                "meeting_transcript_read",
                 "external_contact_search",
             ],
             name="task_mcp",

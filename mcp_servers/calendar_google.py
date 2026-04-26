@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import time as time_module
+import uuid
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -16,6 +18,7 @@ from googleapiclient.errors import HttpError
 from zoneinfo import ZoneInfo
 
 from mcp_servers import google_auth_env as gae
+from mcp_servers import meet_google
 
 CALENDAR_SCOPES = ("https://www.googleapis.com/auth/calendar",)
 
@@ -372,6 +375,13 @@ def _hangout_or_conference_uri(ev: dict[str, Any]) -> str:
     return ""
 
 
+def _conference_status(ev: dict[str, Any]) -> str:
+    conf = ev.get("conferenceData") or {}
+    req = conf.get("createRequest") or {}
+    status = req.get("status") or {}
+    return str(status.get("statusCode") or "").strip()
+
+
 def _normalize_attendees(ev: dict[str, Any]) -> list[dict[str, Any]]:
     raw = ev.get("attendees") or []
     out: list[dict[str, Any]] = []
@@ -465,6 +475,12 @@ def _normalize_event(ev: dict[str, Any]) -> dict[str, Any]:
     hang = _hangout_or_conference_uri(ev)
     if hang:
         out["hangout_link"] = hang
+    meeting_code = meet_google.meeting_code_from_event(ev)
+    if meeting_code:
+        out["meeting_code"] = meeting_code
+    conf_status = _conference_status(ev)
+    if conf_status:
+        out["conference_status"] = conf_status
 
     rec = ev.get("recurrence")
     if isinstance(rec, list) and rec:
@@ -478,6 +494,8 @@ def create_event(
     start_iso: str,
     end_iso: str | None = None,
     recurrence_rules: str | None = None,
+    create_meet: bool = False,
+    enable_transcript: bool = True,
 ) -> str:
     """Create a calendar event; return JSON in the same normalized shape as list_events (+ html_link).
 
@@ -489,6 +507,8 @@ def create_event(
 
     Optional ``recurrence_rules``: newline-separated RFC 5545 lines (``RRULE:...``, ``EXDATE:...``,
     ``RDATE:...``), or rule bodies without the ``RRULE:`` prefix (e.g. ``FREQ=WEEKLY;BYDAY=MO``).
+    Set ``create_meet`` to attach a unique Google Meet link. When ``enable_transcript`` is true, the
+    matching Meet space is patched to enable automatic transcript generation when permissions allow it.
     """
     svc = _calendar_service()
     if svc is None:
@@ -556,25 +576,99 @@ def create_event(
     }
     if rec_lines:
         body["recurrence"] = rec_lines
+    if create_meet:
+        body["conferenceData"] = {
+            "createRequest": {
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+                "requestId": f"loopie-{uuid.uuid4().hex}",
+            }
+        }
     try:
-        created = (
-            svc.events()
-            .insert(calendarId=_calendar_id(), body=body)
-            .execute()
-        )
+        if create_meet:
+            created = (
+                svc.events()
+                .insert(
+                    calendarId=_calendar_id(),
+                    body=body,
+                    conferenceDataVersion=1,
+                )
+                .execute()
+            )
+        else:
+            created = (
+                svc.events()
+                .insert(calendarId=_calendar_id(), body=body)
+                .execute()
+            )
     except HttpError as e:
         status = int(e.resp.status) if e.resp else None
         return json.dumps(
             {"error": "google_calendar_api", "status": status, "reason": str(e)},
             indent=2,
         )
+    if create_meet and not meet_google.meeting_code_from_event(created):
+        for _ in range(3):
+            time_module.sleep(0.5)
+            try:
+                refreshed = (
+                    svc.events()
+                    .get(calendarId=_calendar_id(), eventId=created["id"])
+                    .execute()
+                )
+            except HttpError:
+                break
+            created = refreshed
+            if meet_google.meeting_code_from_event(created):
+                break
+
     out = _normalize_event(created)
     out["created_at"] = created.get("created")
+    if create_meet:
+        out["meet_requested"] = True
+        meeting_code = meet_google.meeting_code_from_event(created)
+        if enable_transcript and meeting_code:
+            out["transcript_enablement"] = meet_google.enable_auto_transcription_for_meeting_code(
+                meeting_code
+            )
+        elif enable_transcript:
+            out["transcript_enablement"] = {
+                "error": "meeting_code_not_available",
+                "detail": "Google Calendar did not return generated Meet conference data yet.",
+            }
     if used_default and default_mins is not None:
         out["default_duration_minutes"] = default_mins
     if picked_slot:
         out["free_slot_selected"] = True
     return json.dumps(out, indent=2)
+
+
+def read_meeting_transcript(event_id: str) -> str:
+    """Read generated Google Meet transcript entries for a Calendar event's Meet link."""
+    svc = _calendar_service()
+    if svc is None:
+        return credentials_missing_response()
+    eid = (event_id or "").strip()
+    if not eid:
+        return json.dumps({"error": "missing_event_id"}, indent=2)
+    try:
+        ev = svc.events().get(calendarId=_calendar_id(), eventId=eid).execute()
+    except HttpError as e:
+        status = int(e.resp.status) if e.resp else None
+        return json.dumps(
+            {"error": "google_calendar_api", "status": status, "reason": str(e)},
+            indent=2,
+        )
+    meeting_code = meet_google.meeting_code_from_event(ev)
+    if not meeting_code:
+        return json.dumps(
+            {
+                "error": "event_has_no_google_meet",
+                "event_id": eid,
+                "detail": "This calendar event has no Google Meet conference data or hangout link.",
+            },
+            indent=2,
+        )
+    return meet_google.read_transcript_for_meeting_code(meeting_code)
 
 
 def update_event(

@@ -24,12 +24,17 @@ psql "$DATABASE_URL" -f sql/migrations/001_init.sql
 
 ## 2. MCP server on Cloud Run (recommended for production)
 
-Enable the [Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) on your project if you use real calendar tools.
+Enable the [Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com), Google Tasks API, People API, and [Google Meet API](https://console.cloud.google.com/apis/library/meet.googleapis.com) on your project if you use real calendar/task/contact/Meet tools.
 
 **Credentials (mount as secrets on the MCP service only; treat refresh tokens like passwords):**
 
 - **Service account:** Create a key, store JSON in Secret Manager. Set `GOOGLE_SERVICE_ACCOUNT_JSON` from the secret (or mount a file and set `GOOGLE_SERVICE_ACCOUNT_PATH`). Share the target calendar with the service account’s email, then set `GOOGLE_CALENDAR_ID` to that calendar’s id (often an email address) — `primary` is only valid for the OAuth user’s own calendar.
-- **OAuth user:** Run [`scripts/oauth_setup.py`](../scripts/oauth_setup.py) locally once with a Desktop OAuth client `client_secret.json`, upload the resulting token JSON to Secret Manager, and set `GOOGLE_OAUTH_TOKEN_JSON` on the MCP service.
+- **OAuth user:** Run [`scripts/oauth_setup.py`](../scripts/oauth_setup.py) locally once with a Desktop OAuth client `client_secret.json`, upload the resulting token JSON to Secret Manager, and set `GOOGLE_OAUTH_TOKEN_JSON` on the MCP service. Rerun this consent flow after adding Meet support so the token includes Meet space readonly/created/settings scopes.
+
+Meet transcript notes:
+
+- Loopie requests a Google Meet link on meeting-like calendar events and attempts to enable automatic transcript generation for the Meet space. Google Workspace/admin policy and organizer privileges still control whether this succeeds.
+- Generated transcript entries are read through the Google Meet API after the conference ends and the transcript artifact is available. If no artifact is visible yet, the task specialist reports that instead of fabricating action items.
 
 Optional: `USER_TIMEZONE` (e.g. `America/Los_Angeles`) for naive ISO times from tools.
 
