@@ -104,7 +104,7 @@ def credentials_missing_response() -> str:
             "hint": (
                 "Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_PATH, "
                 "or GOOGLE_OAUTH_TOKEN_JSON / GOOGLE_OAUTH_TOKEN_PATH (OAuth token must include Tasks scope). "
-                "Run python -m mcp_servers.oauth_setup after enabling the Google Tasks API. "
+                "Run python scripts/oauth_setup.py after enabling the Google Tasks API. "
                 "Optional: GOOGLE_TASKS_LIST_ID for a specific list."
             ),
         },

@@ -63,7 +63,7 @@ def credentials_missing_response() -> str:
             "hint": (
                 "Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_PATH, "
                 "or GOOGLE_OAUTH_TOKEN_JSON / GOOGLE_OAUTH_TOKEN_PATH (OAuth token must include contacts.readonly scope). "
-                "Enable the Google People API and re-run python -m mcp_servers.oauth_setup after updating scopes."
+                "Enable the Google People API and re-run python scripts/oauth_setup.py after updating scopes."
             ),
         },
         indent=2,

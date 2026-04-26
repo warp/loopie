@@ -25,10 +25,16 @@ python -m pip install -r requirements.txt
 
 Use `python -m pip` (not bare `pip3`) so installs always target the active venv.
 
-Run MCP (terminal A), set `MCP_SSE_URL`, apply `sql/migrations/001_init.sql`, set `DATABASE_URL`, then:
+Run MCP in terminal A:
 
 ```bash
-adk web agents
+PYTHONPATH=. python -m mcp_servers.app sse
+```
+
+Then set `MCP_SSE_URL`, apply `sql/migrations/001_init.sql`, set `DATABASE_URL`, and start the Loopie browser UI/API:
+
+```bash
+uvicorn web.app:app --reload
 ```
 
 Deploy only the agent folder:

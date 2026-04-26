@@ -3,11 +3,11 @@
 Requests Google Calendar, Google Tasks, and Google Contacts (People API) scopes so one token can drive all MCP integrations.
 
 Usage:
-  GOOGLE_OAUTH_CLIENT_SECRETS_PATH=/path/to/client_secret.json \\
-  GOOGLE_OAUTH_TOKEN_PATH=/path/to/token.json \\
-  python -m mcp_servers.oauth_setup
+  GOOGLE_OAUTH_CLIENT_SECRETS_PATH=/path/to/client_secret.json \
+  GOOGLE_OAUTH_TOKEN_PATH=/path/to/token.json \
+  python scripts/oauth_setup.py
 
-Or pass paths as argv: python -m mcp_servers.oauth_setup client_secret.json token.json
+Or pass paths as argv: python scripts/oauth_setup.py client_secret.json token.json
 
 If GOOGLE_OAUTH_CLIENT_SECRETS_PATH / GOOGLE_OAUTH_TOKEN_PATH are set in the repo .env, they are loaded automatically (python-dotenv).
 
@@ -20,6 +20,10 @@ import os
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -31,7 +35,7 @@ OAUTH_SCOPES = list(CALENDAR_SCOPES) + list(TASKS_SCOPES) + list(PEOPLE_SCOPES)
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return REPO_ROOT
 
 
 def _load_env() -> None:
@@ -56,7 +60,7 @@ def main() -> None:
         if not secrets or not out:
             print(
                 "Set GOOGLE_OAUTH_CLIENT_SECRETS_PATH and GOOGLE_OAUTH_TOKEN_PATH, "
-                "or run: python -m mcp_servers.oauth_setup <client_secret.json> <token_out.json>",
+                "or run: python scripts/oauth_setup.py <client_secret.json> <token_out.json>",
                 file=sys.stderr,
             )
             sys.exit(1)

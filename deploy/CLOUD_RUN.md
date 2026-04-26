@@ -29,7 +29,7 @@ Enable the [Google Calendar API](https://console.cloud.google.com/apis/library/c
 **Credentials (mount as secrets on the MCP service only; treat refresh tokens like passwords):**
 
 - **Service account:** Create a key, store JSON in Secret Manager. Set `GOOGLE_SERVICE_ACCOUNT_JSON` from the secret (or mount a file and set `GOOGLE_SERVICE_ACCOUNT_PATH`). Share the target calendar with the service account’s email, then set `GOOGLE_CALENDAR_ID` to that calendar’s id (often an email address) — `primary` is only valid for the OAuth user’s own calendar.
-- **OAuth user:** Run [`mcp_servers/oauth_setup.py`](../mcp_servers/oauth_setup.py) locally once with a Desktop OAuth client `client_secret.json`, upload the resulting token JSON to Secret Manager, and set `GOOGLE_OAUTH_TOKEN_JSON` on the MCP service.
+- **OAuth user:** Run [`scripts/oauth_setup.py`](../scripts/oauth_setup.py) locally once with a Desktop OAuth client `client_secret.json`, upload the resulting token JSON to Secret Manager, and set `GOOGLE_OAUTH_TOKEN_JSON` on the MCP service.
 
 Optional: `USER_TIMEZONE` (e.g. `America/Los_Angeles`) for naive ISO times from tools.
 
