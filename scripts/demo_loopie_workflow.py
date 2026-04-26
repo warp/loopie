@@ -117,7 +117,7 @@ async def main() -> None:
     )
     scenarios = [
         (
-            "1. Full handoff: schedule + tasks + notes",
+            "1. Full workflow: schedule + tasks + notes",
             (
                 "Plan Q2 review: add three prep tasks in Google Tasks, block 2 hours "
                 "on my calendar next Tuesday afternoon for 'Q2 review prep', and save "

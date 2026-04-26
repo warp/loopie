@@ -35,12 +35,11 @@ _SCHEDULE_INSTRUCTION_STATIC = (
     "display_name and email (primary_email or emails); do not use or mention Google contact resource IDs. "
     "Summarize time, title, location/link, attendees, and contact highlights. If an event has no attendees, "
     "prep from title, location, and description and note that no guest list was on the event.\n"
-    "Every calendar_list_events item includes event_id. Include each relevant event_id in your handoff to "
-    "the coordinator so notes can be linked and retrieved for that meeting.\n"
-    "At the end of every substantive reply, add a short block exactly like:\n"
-    "Coordinator handoff (schedule):\n"
-    "- …bullets with concrete outcomes (event title, start/end or slot, event_id, invitee errors, etc.).\n"
-    "The coordinator merges several specialists; this block must be scannable so nothing from this step is lost."
+    "Every calendar_list_events item includes event_id. Include each relevant event_id in your reply "
+    "so notes can be linked and retrieved for that meeting.\n"
+    "End every substantive reply with concise bullets of concrete outcomes: event title, start/end or slot, "
+    "event_id, invitee errors, and any explicit no-op. This reply is stored in coordinator context, so make it "
+    "scannable and self-contained."
 )
 
 
@@ -57,15 +56,15 @@ _TASK_INSTRUCTION_STATIC = (
     "with ISO-8601 start_iso and end_iso for the window you need. "
     "You do not create or edit calendar events; delegate scheduling to ScheduleSpecialist. "
     "Always use REFERENCE_TIME when interpreting relative dates. "
-    "Return concise JSON summaries of what changed.\n"
+    "Return concise summaries of what changed.\n"
     "Follow-ups: when the user wants next steps after a meeting or to capture action items, use "
     "calendar_list_events if you need to anchor which meeting (time/title). Create tasks with clear titles "
     "(include meeting title or person name when helpful) and due_iso in RFC3339; default due dates to the "
     "next business day unless the user specifies otherwise. Use external_contact_search when a person "
     "reference is ambiguous; cite display_name and email from results, not resource IDs.\n"
-    "At the end of every substantive reply, add:\n"
-    "Coordinator handoff (tasks):\n"
-    "- …bullets (task titles created, task_ids, dues, list highlights, or explicit \"no task changes\")."
+    "End every substantive reply with concise bullets of concrete outcomes: task titles created, task_ids, "
+    "dues, list highlights, or explicit \"no task changes\". This reply is stored in coordinator context, "
+    "so make it scannable and self-contained."
 )
 
 
@@ -81,14 +80,15 @@ _INFO_INSTRUCTION_STATIC = (
     "The user often does not say the word 'notes'—still run searches and **surface results in your reply** "
     "(summaries or short quotes from body_preview). Lead with a line like 'From your saved notes:' when you "
     "have hits; if nothing matched, say 'No matching saved notes found' so the coordinator can merge honestly.\n"
-    "Always check before you write or before a substantive answer. Order: (1) event_id in handoff or message → "
+    "Always check before you write or before a substantive answer. Order: (1) event_id in coordinator context "
+    "or message → "
     "db_notes_for_calendar_event for each distinct id. (2) db_search_notes_by_keywords with a broad CSV from "
     "titles, names, companies, project codes, tags, and request keywords. (3) If thin, db_search_notes on "
     "2–4 strong phrases. (4) Then db_upsert_note or finalize, merging findings into the answer—do not hide "
     "useful notes in tool output only; repeat the gist for the user.\n"
-    "At the end of every substantive reply, add:\n"
-    "Coordinator handoff (notes):\n"
-    "- …bullets (note titles/ids written, tags, calendar_event_id linked, search hits count, or \"no DB writes\").\n"
+    "End every substantive reply with concise bullets of concrete outcomes: note titles/ids written, tags, "
+    "calendar_event_id linked, search hits count, or \"no DB writes\". This reply is stored in coordinator "
+    "context, so make it scannable and self-contained.\n"
     "Exception: skip searches only for pure external_note_* with no AlloyDB angle, or a trivial ack."
 )
 
@@ -119,6 +119,7 @@ def build_schedule_agent() -> LlmAgent:
         ),
         instruction=_schedule_instruction,
         tools=tools,
+        output_key="temp:schedule_context",
     )
 
 
@@ -144,6 +145,7 @@ def build_task_agent() -> LlmAgent:
         ),
         instruction=_task_instruction,
         tools=tools,
+        output_key="temp:task_context",
     )
 
 
@@ -168,4 +170,5 @@ def build_info_agent() -> LlmAgent:
         ),
         instruction=_info_instruction,
         tools=tools,
+        output_key="temp:info_context",
     )
