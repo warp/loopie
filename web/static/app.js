@@ -2,6 +2,10 @@ const messagesEl = document.getElementById("messages");
 const inputEl = document.getElementById("composerInput");
 const sendBtn = document.getElementById("sendBtn");
 const dropdownEl = document.getElementById("mentionDropdown");
+const learnMoreToggleEl = document.getElementById("learnMoreToggle");
+const learnMorePanelEl = document.getElementById("learnMorePanel");
+const micBtnEl = document.getElementById("micBtn");
+const micHintEl = document.getElementById("micHint");
 
 const SESSION_ID = crypto.randomUUID();
 
@@ -9,6 +13,10 @@ const SESSION_ID = crypto.randomUUID();
 let chatInFlight = false;
 let thinkingRowEl = null;
 const SEND_LABEL_DEFAULT = "Send";
+
+let speechRec = null;
+let speechActive = false;
+let speechFinalPrefix = "";
 
 let mentionState = {
   open: false,
@@ -68,6 +76,77 @@ function addMessage(role, text) {
   msg.appendChild(body);
   messagesEl.appendChild(msg);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setMicUi(active) {
+  if (!micBtnEl) return;
+  micBtnEl.classList.toggle("isRecording", !!active);
+  micBtnEl.setAttribute("aria-label", active ? "Stop dictation" : "Dictate message");
+  micBtnEl.title = active ? "Stop dictation" : "Dictate message";
+}
+
+function setupSpeechToText() {
+  if (!micBtnEl) return;
+
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    micBtnEl.disabled = true;
+    if (micHintEl) micHintEl.classList.remove("hidden");
+    return;
+  }
+
+  micBtnEl.disabled = false;
+  if (micHintEl) micHintEl.classList.add("hidden");
+  speechRec = new SpeechRecognition();
+  speechRec.continuous = true;
+  speechRec.interimResults = true;
+
+  speechRec.onstart = () => {
+    speechActive = true;
+    speechFinalPrefix = inputEl.value;
+    setMicUi(true);
+  };
+  speechRec.onend = () => {
+    speechActive = false;
+    setMicUi(false);
+  };
+  speechRec.onerror = () => {
+    speechActive = false;
+    setMicUi(false);
+  };
+  speechRec.onresult = (event) => {
+    let finalTxt = "";
+    let interimTxt = "";
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const res = event.results[i];
+      const t = res[0] && res[0].transcript ? String(res[0].transcript) : "";
+      if (res.isFinal) finalTxt += t;
+      else interimTxt += t;
+    }
+    const prefix = speechFinalPrefix ? speechFinalPrefix.replace(/\s+$/, "") : "";
+    const spacer = prefix ? " " : "";
+    inputEl.value = `${prefix}${spacer}${(finalTxt + interimTxt).trim()}`;
+    inputEl.focus();
+  };
+
+  micBtnEl.addEventListener("click", () => {
+    if (!speechRec) return;
+    if (chatInFlight) return;
+    if (!speechActive) {
+      try {
+        speechRec.start();
+      } catch (_) {
+        // start() can throw if called too quickly after end(); ignore.
+      }
+    } else {
+      try {
+        speechRec.stop();
+      } catch (_) {
+        // ignore
+      }
+    }
+  });
 }
 
 function showThinkingRow() {
@@ -321,6 +400,13 @@ async function sendMessage() {
   const text = inputEl.value.trim();
   if (!text || chatInFlight) return;
   hideDropdown();
+  if (speechActive && speechRec) {
+    try {
+      speechRec.stop();
+    } catch (_) {
+      // ignore
+    }
+  }
 
   chatInFlight = true;
   inputEl.value = "";
@@ -368,7 +454,17 @@ async function sendMessage() {
 
 sendBtn.addEventListener("click", sendMessage);
 
-addMessage(
-  "agent",
-  "Hi — ask me something. I can help with calendar scheduling, tasks, meeting prep/follow-ups, and saving notes/recaps. Use @ to mention a contact.",
-);
+if (learnMoreToggleEl && learnMorePanelEl) {
+  learnMoreToggleEl.addEventListener("click", () => {
+    const isHidden = learnMorePanelEl.classList.contains("hidden");
+    learnMorePanelEl.classList.toggle("hidden", !isHidden);
+    learnMoreToggleEl.setAttribute(
+      "aria-expanded",
+      isHidden ? "true" : "false",
+    );
+  });
+}
+
+setupSpeechToText();
+
+addMessage("agent", "Hi! How can I help today?");

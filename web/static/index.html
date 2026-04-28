@@ -13,13 +13,39 @@
           <div class="title">Loopie</div>
           <a
             class="headerLink"
-            href="https://calendar.google.com/calendar/u/1?cid=bG9vcGllZGVtb0BnbWFpbC5jb20"
+            href="https://calendar.google.com/calendar/u/0/embed?src=loopiedemo@gmail.com&ctz=Pacific/Auckland"
             target="_blank"
             rel="noopener noreferrer"
             >Demo calendar</a
           >
         </div>
-        <div class="subtitle">Type <code>@</code> to mention a contact.</div>
+        <div class="subtitle">
+          Type <code>@</code> to mention a contact.
+          <button
+            id="learnMoreToggle"
+            class="learnMoreBtn"
+            type="button"
+            aria-expanded="false"
+            aria-controls="learnMorePanel"
+          >
+            Learn more
+          </button>
+        </div>
+        <div id="learnMorePanel" class="learnMorePanel hidden">
+          <div class="learnMoreTitle">
+            Loopie is here to help you stay on top of your tasks and meetings,
+            it can...
+          </div>
+          <ul class="learnMoreList">
+            <li>Schedule and update calendar events (and invite attendees)</li>
+            <li>Create, list, and complete tasks</li>
+            <li>
+              Meeting prep and follow-ups (including transcript-based recaps
+              when available)
+            </li>
+            <li>Save/search notes and link recaps to a meeting</li>
+          </ul>
+        </div>
       </header>
 
       <main class="main">
@@ -32,9 +58,34 @@
 
         <div class="composer">
           <label class="composerLabel" for="composerInput">Message</label>
-          <textarea id="composerInput" class="composerInput" rows="3" placeholder="Ask me to plan, schedule, or take notes..."></textarea>
+          <div class="composerInputRow">
+            <textarea
+              id="composerInput"
+              class="composerInput"
+              rows="3"
+              placeholder="Ask me to plan, schedule, or take notes..."
+            ></textarea>
+            <button
+              id="micBtn"
+              class="micBtn"
+              type="button"
+              aria-label="Dictate message"
+              title="Dictate message"
+              disabled
+            >
+              <span class="micIcon" aria-hidden="true">🎙️</span>
+            </button>
+          </div>
+          <div id="micHint" class="micHint hidden">
+            Voice input not supported in this browser.
+          </div>
 
-          <div id="mentionDropdown" class="mentionDropdown hidden" role="listbox" aria-label="Mention suggestions"></div>
+          <div
+            id="mentionDropdown"
+            class="mentionDropdown hidden"
+            role="listbox"
+            aria-label="Mention suggestions"
+          ></div>
 
           <div class="composerActions">
             <button id="sendBtn" class="sendBtn">Send</button>
@@ -46,4 +97,3 @@
     <script src="/static/app.js"></script>
   </body>
 </html>
-
