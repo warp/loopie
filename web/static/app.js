@@ -368,4 +368,7 @@ async function sendMessage() {
 
 sendBtn.addEventListener("click", sendMessage);
 
-addMessage("agent", "Hi — ask me something. Use @ to mention a contact.");
+addMessage(
+  "agent",
+  "Hi — ask me something. I can help with calendar scheduling, tasks, meeting prep/follow-ups, and saving notes/recaps. Use @ to mention a contact.",
+);
