@@ -220,6 +220,7 @@ body {
   background: rgba(0, 0, 0, 0.14);
   color: var(--text);
   padding: 10px 12px;
+  padding-right: 56px;
   font-size: 14px;
   outline: none;
 }
@@ -234,14 +235,11 @@ body {
 }
 
 .composerInputRow {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: start;
+  position: relative;
 }
 .micBtn {
-  height: 40px;
-  width: 44px;
+  height: 36px;
+  width: 38px;
   border-radius: 12px;
   border: 1px solid var(--panelBorder);
   background: rgba(0, 0, 0, 0.14);
@@ -250,6 +248,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
 }
 @media (prefers-color-scheme: light) {
   .micBtn { background: rgba(255, 255, 255, 0.75); }
