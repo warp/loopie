@@ -5,6 +5,7 @@
 secrets/*
 !secrets/.gitkeep
 .adk
+.perf
 __pycache__
 *.pyc
 *.pyo
