@@ -39,6 +39,25 @@ body {
 .header {
   margin-bottom: 18px;
 }
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.headerLink {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--panelBorder);
+  background: var(--panel);
+}
+.headerLink:hover {
+  color: var(--text);
+  border-color: rgba(124, 58, 237, 0.45);
+}
 .title {
   font-size: 20px;
   font-weight: 700;
