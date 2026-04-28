@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(REPO_ROOT / ".env")
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -26,7 +26,12 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from agents.loopie.agent import root_agent
+from agents.loopie.tools import db as loopie_db
 from mcp_servers import people_google
+from web.observability import Stopwatch
+from web.observability import env_int
+from web.observability import json_log
+from web.observability import request_id_from_headers
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +68,48 @@ async def _lifespan(app: FastAPI):
         "on",
     )
     if sse and not disabled and not use_stdio:
+        sw = Stopwatch.start()
         ok = await asyncio.to_thread(_mcp_sse_tcp_reachable, sse)
+        json_log(
+            logger,
+            "info" if ok else "warning",
+            {
+                "event": "mcp_sse_reachability",
+                "mcp_sse_url": sse,
+                "ok": ok,
+                "elapsed_ms": round(sw.elapsed_ms(), 3),
+            },
+        )
         if not ok:
             logger.warning(
                 "MCP_SSE_URL is set (%s) but nothing is accepting TCP connections there. "
                 "Calendar/tasks MCP will fail until you start the server "
                 "(PYTHONPATH=. python -m mcp_servers.app sse) or set MCP_USE_STDIO=1.",
                 sse,
+            )
+
+    if os.environ.get("WARM_DB_ON_STARTUP", "").strip().lower() in ("1", "true", "yes", "on"):
+        sw = Stopwatch.start()
+        try:
+            if loopie_db.database_url():
+                await loopie_db.get_pool()
+                json_log(
+                    logger,
+                    "info",
+                    {"event": "db_pool_warmup", "ok": True, "elapsed_ms": round(sw.elapsed_ms(), 3)},
+                )
+            else:
+                json_log(logger, "info", {"event": "db_pool_warmup", "ok": False, "reason": "no_database_url"})
+        except Exception as e:
+            json_log(
+                logger,
+                "warning",
+                {
+                    "event": "db_pool_warmup",
+                    "ok": False,
+                    "elapsed_ms": round(sw.elapsed_ms(), 3),
+                    "error": str(e),
+                },
             )
     yield
 
@@ -108,7 +148,20 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def api_chat(req: ChatRequest) -> ChatResponse:
+async def api_chat(req: ChatRequest, request: Request) -> ChatResponse:
+    request_id = request_id_from_headers(request.headers)
+    total_sw = Stopwatch.start()
+    slow_ms = env_int("SLOW_CHAT_MS", 2500)
+    outcome = "ok"
+    agent_error: str | None = None
+    response_len = 0
+    message_len = len(req.message or "")
+
+    t_session_ms = 0.0
+    t_agent_ms = 0.0
+    t_finalize_ms = 0.0
+
+    sw = Stopwatch.start()
     existing = await session_service.get_session(
         app_name=APP_NAME, user_id=req.user_id, session_id=req.session_id
     )
@@ -119,11 +172,11 @@ async def api_chat(req: ChatRequest) -> ChatResponse:
             )
         except AlreadyExistsError:
             pass
+    t_session_ms = sw.elapsed_ms()
 
     content = types.Content(role="user", parts=[types.Part(text=req.message)])
-    events = runner.run_async(
-        user_id=req.user_id, session_id=req.session_id, new_message=content
-    )
+    sw = Stopwatch.start()
+    events = runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=content)
 
     final_text = "No response received."
     try:
@@ -133,8 +186,11 @@ async def api_chat(req: ChatRequest) -> ChatResponse:
                     final_text = event.content.parts[0].text or final_text
                 elif event.actions and event.actions.escalate:
                     final_text = event.error_message or "Agent escalated."
+                    outcome = "escalate"
                 break
     except ConnectionError as e:
+        outcome = "error"
+        agent_error = str(e).strip() or "ConnectionError"
         sse = os.environ.get("MCP_SSE_URL", "").strip()
         raw = str(e).strip()
         # ADK often raises ConnectionError with an empty suffix after "Failed to create MCP session:".
@@ -159,7 +215,53 @@ async def api_chat(req: ChatRequest) -> ChatResponse:
         }
         if sse:
             detail["mcp_sse_url"] = sse
+        t_agent_ms = sw.elapsed_ms()
+        json_log(
+            logger,
+            "warning" if total_sw.elapsed_ms() >= slow_ms else "info",
+            {
+                "event": "chat_request",
+                "request_id": request_id,
+                "user_id": req.user_id,
+                "session_id": req.session_id,
+                "message_len": message_len,
+                "outcome": outcome,
+                "error": agent_error,
+                "timings_ms": {
+                    "session": round(t_session_ms, 3),
+                    "agent": round(t_agent_ms, 3),
+                    "finalize": round(t_finalize_ms, 3),
+                    "total": round(total_sw.elapsed_ms(), 3),
+                },
+            },
+        )
         raise HTTPException(status_code=503, detail=detail) from e
+
+    t_agent_ms = sw.elapsed_ms()
+    sw = Stopwatch.start()
+    response_len = len(final_text or "")
+    t_finalize_ms = sw.elapsed_ms()
+
+    total_ms = total_sw.elapsed_ms()
+    json_log(
+        logger,
+        "warning" if total_ms >= slow_ms else "info",
+        {
+            "event": "chat_request",
+            "request_id": request_id,
+            "user_id": req.user_id,
+            "session_id": req.session_id,
+            "message_len": message_len,
+            "response_len": response_len,
+            "outcome": outcome,
+            "timings_ms": {
+                "session": round(t_session_ms, 3),
+                "agent": round(t_agent_ms, 3),
+                "finalize": round(t_finalize_ms, 3),
+                "total": round(total_ms, 3),
+            },
+        },
+    )
 
     return ChatResponse(session_id=req.session_id, user_id=req.user_id, response=final_text)
 
