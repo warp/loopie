@@ -8,6 +8,7 @@ WORKDIR /app
 # Root requirements (ADK, FastAPI, agent deps); paths must match -r agents/loopie/requirements.txt
 COPY requirements.txt .
 COPY agents/loopie/requirements.txt agents/loopie/requirements.txt
+COPY mcp_servers/requirements.txt mcp_servers/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt \
   && pip install --no-cache-dir \
     "google-api-python-client>=2.150.0" \
