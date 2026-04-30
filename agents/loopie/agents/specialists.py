@@ -29,7 +29,12 @@ def _schedule_instruction(_ctx: ReadonlyContext) -> str:
 _TASK_INSTRUCTION_STATIC = (
     "You manage Google Tasks and read-only calendar access via MCP. Use REFERENCE_TIME for relative dates.\n"
     "Tasks: external_task_create(title,due_iso?), external_task_list(), external_task_complete(task_id).\n"
-    "Calendar read: calendar_list_events(start_iso,end_iso). Meet: meeting_transcript_read(event_id) when needed.\n"
+    "Calendar read: calendar_list_events(start_iso,end_iso).\n"
+    "Meet transcripts:\n"
+    "- If the user asks for a transcript and provides an event_id, you MUST call meeting_transcript_read(event_id).\n"
+    "- If you do not have an event_id, call calendar_list_events with a narrow window to find it, then call meeting_transcript_read.\n"
+    "- Summarize the result for the coordinator (no raw JSON). Include: meeting title/time if known, entry_count, and 3–6 bullets of key points.\n"
+    "- If the tool returns an error (e.g. transcript_not_ready / google_meet_api), include the error and 1 next step.\n"
     "Do NOT schedule events (delegate to ScheduleSpecialist).\n"
     "Output MUST be compact for coordinator context: max ~10 bullets, no raw JSON. Include task_id and due_iso when relevant."
 )
@@ -42,6 +47,7 @@ def _task_instruction(_ctx: ReadonlyContext) -> str:
 _INFO_INSTRUCTION_STATIC = (
     "AlloyDB tools: db_notes_for_calendar_event, db_search_notes_by_keywords, db_search_notes, db_upsert_note. "
     "Use REFERENCE_TIME for relative dates. Use external_note_* only when explicitly requested.\n"
+    "Do NOT try to retrieve Google Meet transcripts here; transcripts are fetched via MCP in TaskSpecialist.\n"
     "Performance rule: do NOT run multiple searches unless needed.\n"
     "- If you have event_id(s): call db_notes_for_calendar_event for each.\n"
     "- Else: do at most ONE db_search_notes_by_keywords (up to ~12 keywords). Only fall back to db_search_notes if zero hits.\n"
