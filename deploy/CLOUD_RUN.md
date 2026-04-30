@@ -132,7 +132,7 @@ gcloud run deploy loopie-web \
   --region $GOOGLE_CLOUD_REGION \
   --allow-unauthenticated \
   --set-env-vars=GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_REGION=$GOOGLE_CLOUD_REGION,MCP_SSE_URL=https://YOUR-MCP-RUN-URL/sse \
-  --set-secrets=DATABASE_URL=DATABASE_URL:latest
+  --set-secrets=DATABASE_URL=DATABASE_URL:latest,GOOGLE_OAUTH_TOKEN_JSON=GOOGLE_OAUTH_TOKEN_JSON:latest
 ```
 
 Add the same **`--vpc-connector`** / **`--vpc-egress`** flags as the ADK service if `DATABASE_URL` uses a **private** AlloyDB IP. Grant the runtime service account **Secret Accessor** on any mounted secrets (see §2). Open the service URL at **`/`** for the UI.
@@ -164,3 +164,4 @@ If you omit `MCP_SSE_URL`, calendar and external MCP tools are disabled; databas
 - **Single-tenant today** — The solution is oriented around one primary Google identity and a default user id (`DEFAULT_USER_ID` in `.env.example`). Horizontal scale on Cloud Run adds replicas of the same configuration; it does not by itself turn the app into a multi-customer SaaS.
 - **OAuth for many users** — To support multiple end users, the OAuth consent and token storage flow would need to be **extended** so each user (or tenant) has **their own refresh/access tokens** (and likely per-user routing from the agent or API into the MCP layer), instead of a single shared `GOOGLE_OAUTH_TOKEN_*` on the MCP service.
 - **Notes database** — For strong isolation and growth at scale, the notes store would need **partitioning** (or an equivalent tenancy strategy: schemas per tenant, row-level tenant keys with partitioning, or separate databases) aligned with how you shard users and backup/restore.
+

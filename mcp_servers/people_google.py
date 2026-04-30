@@ -61,9 +61,10 @@ def credentials_missing_response() -> str:
         {
             "error": "people_credentials_not_configured",
             "hint": (
-                "Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_PATH, "
-                "or GOOGLE_OAUTH_TOKEN_JSON / GOOGLE_OAUTH_TOKEN_PATH (OAuth token must include contacts.readonly scope). "
-                "Enable the Google People API and re-run python scripts/oauth_setup.py after updating scopes."
+                "No Google People API credentials found. Set GOOGLE_OAUTH_TOKEN_JSON / GOOGLE_OAUTH_TOKEN_PATH "
+                "(recommended: user OAuth token with contacts.readonly scope), or set GOOGLE_SERVICE_ACCOUNT_JSON / "
+                "GOOGLE_SERVICE_ACCOUNT_PATH. Enable the Google People API. If you generated a token before adding "
+                "Contacts support, re-run: python scripts/oauth_setup.py (updates scopes)."
             ),
         },
         indent=2,
